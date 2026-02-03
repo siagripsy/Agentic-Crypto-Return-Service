@@ -1,5 +1,8 @@
 # Agentic Probabilistic Crypto Return Analysis Service
 
+This is a test text for Branches.
+
+
 Capstone project focused on building an agentic AI system that analyzes
 historical cryptocurrency market regimes and generates probabilistic
 return scenarios to support investment decision making.
