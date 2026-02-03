@@ -7,8 +7,6 @@ return scenarios to support investment decision making.
 ⚠️ **Disclaimer:** This project is for academic and research purposes
 only. It is NOT financial advice.
 
-Test Protection
-
 ------------------------------------------------------------------------
 
 ## 📌 Project Overview
