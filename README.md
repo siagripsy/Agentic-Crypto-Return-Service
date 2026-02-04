@@ -1,6 +1,4 @@
 
-Sia
-
 # Agentic Probabilistic Crypto Return Analysis Service
 
 Capstone project focused on building an agentic AI system that analyzes
