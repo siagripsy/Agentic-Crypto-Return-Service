@@ -4,7 +4,7 @@ This document provides a high level visualization of the Agentic Probabilistic C
 
 ## High Level Architecture Diagram
 ```mermaid
-flowchart LR
+flowchart TB
     Client("Client / UI / Consumer") -->|"HTTP JSON"| API("api: FastAPI")
 
     API -->|"AnalysisRequest"| SVC("core/services")
