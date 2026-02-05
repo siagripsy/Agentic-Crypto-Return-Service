@@ -1,9 +1,13 @@
 # System Architecture (W5)
 
-This document provides a high level visualization of the Agentic Probabilistic Crypto Return Analysis Service.
+This document provides a high level visualization of the Agentic
+Probabilistic Crypto Return Analysis Service.
+
+------------------------------------------------------------------------
 
 ## High Level Architecture Diagram
-```mermaid
+
+``` mermaid
 flowchart LR
     Client("Client") -->|"HTTP"| API("api: FastAPI")
     API -->|"AR"| SVC("core/services")
@@ -34,23 +38,35 @@ flowchart LR
     AG -->|"RES"| SVC
     SVC -->|"RES"| API
     API -->|"HTTP"| Client
+```
 
+------------------------------------------------------------------------
 
-
-
-```md
 ## Legend (Abbreviations)
 
-- AR: AnalysisRequest  
-- RES: AnalysisResult  
-- Q: MarketDataQuery  
-- DS: MarketDataset  
-- FS: FeatureSet  
-- RS: RegimeState  
-- MC: ModelConfig  
-- MO: ModelOutput  
-- SC: ScenarioConfig  
-- SS: ScenarioSet  
-- RC: RiskConfig  
-- RR: RiskReport  
-- PR: PortfolioResult
+-   AR: AnalysisRequest\
+-   RES: AnalysisResult\
+-   Q: MarketDataQuery\
+-   DS: MarketDataset\
+-   FS: FeatureSet\
+-   RS: RegimeState\
+-   MC: ModelConfig\
+-   MO: ModelOutput\
+-   SC: ScenarioConfig\
+-   SS: ScenarioSet\
+-   RC: RiskConfig\
+-   RR: RiskReport\
+-   PR: PortfolioResult
+
+------------------------------------------------------------------------
+
+## Notes
+
+-   `api/` handles HTTP validation and response serialization only.
+-   `core/agents` orchestrates the end to end workflow.
+-   `core/services` is the stable boundary between API and internal
+    logic.
+-   `data/raw` stores unprocessed inputs.
+-   `data/processed` stores curated and versioned artifacts.
+-   The diagram reflects an advanced API where scenario and risk
+    parameters are explicitly configurable.
