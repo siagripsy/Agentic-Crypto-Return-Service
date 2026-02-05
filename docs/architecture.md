@@ -4,34 +4,53 @@ This document provides a high level visualization of the Agentic Probabilistic C
 
 ## High Level Architecture Diagram
 ```mermaid
-flowchart TB
-    Client("Client / UI / Consumer") -->|"HTTP JSON"| API("api: FastAPI")
-
-    API -->|"AnalysisRequest"| SVC("core/services")
+flowchart LR
+    Client("Client") -->|"HTTP"| API("api: FastAPI")
+    API -->|"AR"| SVC("core/services")
     SVC -->|"run_analysis"| AG("core/agents")
 
-    AG -->|"MarketDataQuery"| DA("core/data_access")
-    DA -->|"MarketDataset + FeatureSet"| AG
+    AG -->|"Q"| DA("core/data_access")
+    DA -->|"DS, FS"| AG
 
-    AG -->|"optional: build_processed_data"| PL("core/pipelines")
+    DRAW[("data/raw")] -->|"raw"| PL("core/pipelines")
     PL -->|"artifacts"| DPROC[("data/processed")]
-    DRAW[("data/raw")] --> PL
+    AG -->|"optional"| PL
 
-    AG -->|"features"| RD("core/regime_detection")
-    RD -->|"RegimeState"| AG
+    AG -->|"FS"| RD("core/regime_detection")
+    RD -->|"RS"| AG
 
-    AG -->|"FeatureSet + ModelConfig"| MD("core/models")
-    MD -->|"ModelOutput"| AG
+    AG -->|"FS, MC"| MD("core/models")
+    MD -->|"MO"| AG
 
-    AG -->|"ModelOutput + ScenarioConfig + RegimeState"| SE("core/scenario_engine")
-    SE -->|"ScenarioSet"| AG
+    AG -->|"MO, SC, RS"| SE("core/scenario_engine")
+    SE -->|"SS"| AG
 
-    AG -->|"ScenarioSet + RiskConfig"| RK("core/risk")
-    RK -->|"RiskReport"| AG
+    AG -->|"SS, RC"| RK("core/risk")
+    RK -->|"RR"| AG
 
     AG -->|"optional"| PF("core/portfolio")
-    PF -->|"PortfolioResult"| AG
+    PF -->|"PR"| AG
 
-    AG -->|"AnalysisResult"| SVC
-    SVC -->|"AnalysisResult"| API
-    API -->|"HTTP Response JSON"| Client
+    AG -->|"RES"| SVC
+    SVC -->|"RES"| API
+    API -->|"HTTP"| Client
+
+
+
+
+```md
+## Legend (Abbreviations)
+
+- AR: AnalysisRequest  
+- RES: AnalysisResult  
+- Q: MarketDataQuery  
+- DS: MarketDataset  
+- FS: FeatureSet  
+- RS: RegimeState  
+- MC: ModelConfig  
+- MO: ModelOutput  
+- SC: ScenarioConfig  
+- SS: ScenarioSet  
+- RC: RiskConfig  
+- RR: RiskReport  
+- PR: PortfolioResult
