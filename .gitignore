@@ -206,3 +206,9 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+
+# generated datasets
+data/raw/ohlcv/
+data/raw/market_cap/
+data/processed/daily/
