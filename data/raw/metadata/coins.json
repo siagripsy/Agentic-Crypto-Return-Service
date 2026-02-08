@@ -1,0 +1,7 @@
+{
+  "vs_currency": "usd",
+  "coins": [
+    { "symbol": "BTC", "coingecko_id": "bitcoin", "yahoo_ticker": "BTC-USD", "start_year": 2014 },
+    { "symbol": "ETH", "coingecko_id": "ethereum", "yahoo_ticker": "ETH-USD", "start_year": 2016 }
+  ]
+}
