@@ -147,7 +147,7 @@ class ScenarioEngine:
     
 
 #===============================================
-#
+#       Monte Carlo simulation of price paths
 #===============================================
 
     def simulate_paths(self, params: dict, start_price: float, horizon_days: int, n_scenarios: int):
@@ -202,8 +202,54 @@ class ScenarioEngine:
 
     
 #===============================================
-#
+#             run and create output
 #===============================================
 
     def run(self, config: ScenarioConfig) -> dict:
-        raise NotImplementedError
+        """
+        End-to-end baseline scenario generation.
+
+        Pipeline:
+        1) compute log returns
+        2) fit Normal distribution params (mu, sigma)
+        3) simulate Monte Carlo price paths
+        4) compute summary statistics on terminal prices
+
+        Returns a dict that can later be consumed by an agent or API layer.
+        """
+        df = self.price_df.copy()
+        df.columns = [c.lower() for c in df.columns]
+
+        # last observed price (starting point)
+        last_price = float(pd.to_numeric(df["close"], errors="coerce").dropna().iloc[-1])
+
+        returns = self.compute_returns()
+        params = self.fit_distribution(returns)
+
+        paths = self.simulate_paths(
+            params=params,
+            start_price=last_price,
+            horizon_days=config.horizon_days,
+            n_scenarios=config.n_scenarios,
+        )
+
+        terminal = paths[:, -1]
+
+        summary = {
+            "start_price": last_price,
+            "horizon_days": int(config.horizon_days),
+            "n_scenarios": int(config.n_scenarios),
+            "terminal_mean": float(np.mean(terminal)),
+            "terminal_median": float(np.median(terminal)),
+            "terminal_p05": float(np.percentile(terminal, 5)),
+            "terminal_p50": float(np.percentile(terminal, 50)),
+            "terminal_p95": float(np.percentile(terminal, 95)),
+        }
+
+        return {
+            "asset": config.asset,
+            "distribution": params,
+            "summary": summary,
+            "paths": paths,  # for now keep full paths (later can be optional)
+    }
+

@@ -29,3 +29,14 @@ def test_compute_returns_smoke():
 
     assert paths.shape == (500, 31)
     assert (paths > 0).all()
+
+
+    # Test run method
+    from core.pipelines.scenario_engine import ScenarioConfig
+
+    out = engine.run(ScenarioConfig(asset="BTC", horizon_days=30, n_scenarios=300))
+
+    assert out["asset"] == "BTC"
+    assert out["distribution"]["dist"] == "normal"
+    assert out["summary"]["horizon_days"] == 30
+    assert out["paths"].shape == (300, 31)
