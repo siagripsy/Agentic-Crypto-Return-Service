@@ -1,7 +1,18 @@
 {
   "vs_currency": "usd",
   "coins": [
-    { "symbol": "BTC", "coingecko_id": "bitcoin", "yahoo_ticker": "BTC-USD", "start_year": 2014 },
-    { "symbol": "ETH", "coingecko_id": "ethereum", "yahoo_ticker": "ETH-USD", "start_year": 2016 }
-  ]
+  { "symbol": "BTC",   "coingecko_id": "bitcoin",      "yahoo_ticker": "BTC-USD",   "start_year": 2019 },
+  { "symbol": "ETH",   "coingecko_id": "ethereum",     "yahoo_ticker": "ETH-USD",   "start_year": 2015 },
+  { "symbol": "BNB",   "coingecko_id": "binancecoin",  "yahoo_ticker": "BNB-USD",   "start_year": 2017 },
+  { "symbol": "XRP",   "coingecko_id": "ripple",       "yahoo_ticker": "XRP-USD",   "start_year": 2012 },
+  { "symbol": "SOL",   "coingecko_id": "solana",       "yahoo_ticker": "SOL-USD",   "start_year": 2020 },
+  { "symbol": "DOGE",  "coingecko_id": "dogecoin",     "yahoo_ticker": "DOGE-USD",  "start_year": 2013 },
+  { "symbol": "ADA",   "coingecko_id": "cardano",      "yahoo_ticker": "ADA-USD",   "start_year": 2017 },
+  { "symbol": "LINK",  "coingecko_id": "chainlink",    "yahoo_ticker": "LINK-USD",  "start_year": 2017 },
+  { "symbol": "AVAX",  "coingecko_id": "avalanche-2",  "yahoo_ticker": "AVAX-USD",  "start_year": 2020 },
+  { "symbol": "FLOKI", "coingecko_id": "floki",        "yahoo_ticker": "FLOKI-USD", "start_year": 2021 }
+]
 }
+
+
+

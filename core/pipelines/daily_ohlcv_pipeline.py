@@ -18,6 +18,9 @@ def run_one_ticker(ticker: str, start: Optional[str] = None) -> Path:
     # if file exists -> incremental else we need to get data from start
     last_date = read_last_date(out_path)
 
+    if start is None:
+       start = '2009-01-01'
+
     fetch_start = start
     if last_date:
         # fetch from next day
@@ -32,6 +35,9 @@ def run_one_ticker(ticker: str, start: Optional[str] = None) -> Path:
             print(f"[{ticker}] up-to-date (last_date={last_date}). No fetch needed.")
             return out_path
 
+ 
+    
+    
     df_new = fetch_daily_ohlcv(ticker, start=fetch_start)
     if df_new.empty:
         print(f"[{ticker}] no new OHLCV rows to add (maybe up-to-date or unavailable).")
