@@ -212,3 +212,6 @@ __marimo__/
 data/raw/ohlcv/
 data/raw/market_cap/
 data/processed/daily/
+
+# Notebook demo outputs
+notebooks/outputs/
