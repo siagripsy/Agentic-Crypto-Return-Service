@@ -27,7 +27,7 @@ def fetch_marketcap_daily(
         # CoinGecko Demo keys use this header format in many setups
         headers["x-cg-demo-api-key"] = api_key
 
-    r = requests.get(url, params=params, headers=headers, timeout=30)
+    #r = requests.get(url, params=params, headers=headers, timeout=30)
     r = requests.get(url, params=params, headers=headers, timeout=30)
 
     if r.status_code != 200:
