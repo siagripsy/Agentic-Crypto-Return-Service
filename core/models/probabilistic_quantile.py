@@ -101,7 +101,7 @@ def fit_quantile_models(
     quantiles: List[float] = [0.01, 0.05, 0.10, 0.25, 0.50, 0.75, 0.90, 0.95, 0.99],
     random_state: int = 42,
     n_estimators: int = 200,
-    learning_rate: float = 0.5,
+    learning_rate: float = 0.05,
     max_depth: int = 3,
 ) -> QuantileModelBundle:
     """

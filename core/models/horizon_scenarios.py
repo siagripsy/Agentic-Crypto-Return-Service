@@ -103,15 +103,23 @@ def simulate_horizon_log_returns(
     # Predict distribution ONCE (regime fixed)
     qpred = predict_quantiles(bundle, start_row)
 
+    # Stable RNG across numpy versions
+    rng = np.random.Generator(np.random.PCG64(seed))
+
+    # Pull quantiles + predicted values for this single row
+    qs = np.array(sorted(bundle.quantiles), dtype=float)
+    vals = np.array([qpred.iloc[0][f"q_{q:.2f}"] for q in qs], dtype=float)
+
     cum = np.zeros(n_scenarios, dtype=float)
-    for d in range(horizon_days):
-        # vary seed per day to avoid identical randomness each step
-        daily = sample_from_quantiles(
-            qpred,
-            quantiles=bundle.quantiles,
-            n_samples=n_scenarios,
-            seed=seed + d,
-        )
+
+    for _ in range(horizon_days):
+        # Draw U~Uniform(0,1) and map through inverse CDF (linear interp)
+        u = rng.uniform(0.0, 1.0, size=n_scenarios)
+
+        # Clamp to avoid extrapolation beyond our quantile grid
+        u = np.clip(u, qs.min(), qs.max())
+
+        daily = np.interp(u, qs, vals)  # inverse-CDF sampling approximation
         cum += daily
 
     return cum
