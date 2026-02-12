@@ -47,6 +47,8 @@ def run_one_ticker(ticker: str, start: Optional[str] = None) -> Path:
     if out_path.exists():
         df_old = pd.read_csv(out_path)
         df_all = pd.concat([df_old, df_new], ignore_index=True)
+        df_all["date"] = pd.to_datetime(df_all["date"], errors="coerce")
+        df_all = df_all.dropna(subset=["date"])
         df_all = df_all.drop_duplicates(subset=["date"]).sort_values("date")
     else:
         df_all = df_new
