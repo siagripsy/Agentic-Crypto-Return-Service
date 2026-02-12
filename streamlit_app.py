@@ -45,7 +45,7 @@ def log_to_simple(x: float) -> float:
     return float(np.exp(x) - 1.0)
 
 
-@st.cache_resource
+@st.cache_resource  # Loads and caches the saved quantile model bundle (joblib file) for the selected crypto symbol.
 def load_bundle(symbol: str):
     path = MODELS_DIR / f"{symbol.upper()}_quantile_bundle.joblib"
     if not path.exists():
@@ -53,7 +53,7 @@ def load_bundle(symbol: str):
     return joblib.load(path)
 
 
-@st.cache_data
+@st.cache_data   # # Loads and caches the processed feature dataset for the symbol, parsing and sorting by date.
 def load_features(symbol: str) -> pd.DataFrame:
     path = FEATURES_DIR / f"{symbol.upper()}_features.csv"
     if not path.exists():
@@ -63,7 +63,7 @@ def load_features(symbol: str) -> pd.DataFrame:
     df = df.sort_values("date").reset_index(drop=True)
     return df
 
-
+# Formats summary statistics into log returns, simple returns, or both depending on the selected output mode.
 def format_summary(summary_log: dict, mode: str) -> dict:
     if mode == "log":
         return {k: float(v) for k, v in summary_log.items()}

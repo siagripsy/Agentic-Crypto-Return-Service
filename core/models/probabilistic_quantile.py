@@ -14,7 +14,7 @@ class QuantileModelBundle:
     Holds a set of quantile regressors trained for different quantiles.
 
     Example:
-        quantiles = [0.05, 0.50, 0.95]
+        quantiles = [0.01, 0.05, 0.10, 0.25, 0.50, 0.75, 0.90, 0.95, 0.99]
         models[q] predicts the q-quantile of next-day returns
     """
     quantiles: List[float]
@@ -147,6 +147,7 @@ def sample_from_quantiles(
     seed: int = 0,
 ) -> np.ndarray:
     """
+    this function reconstructs a full distribution from quantiles and generates samples from it.
     Generates samples from a predicted distribution using inverse-CDF sampling.
 
     Input:
@@ -156,10 +157,11 @@ def sample_from_quantiles(
     Method:
     - Approximate the CDF by linear interpolation between predicted quantile points.
     - Sample u ~ Uniform(0,1), map through inverse CDF.
+    - CDF (Cumulative Distribution Function): What is the probability the outcome is less than or equal to x?
 
     Note:
     - With only [0.05, 0.50, 0.95], tails are coarse.
-      Later you can fit more quantiles for sharper VaR/CVaR.
+    - More quantiles yield smoother distributions.
     """
     rng = np.random.default_rng(seed)
 
