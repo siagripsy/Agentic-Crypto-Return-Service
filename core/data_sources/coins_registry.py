@@ -77,3 +77,47 @@ def extract_coingecko_map(coins_metadata: Any) -> list[tuple[str, str]]:
             out.append((sym, cg))
             seen.add(sym)
     return out
+
+
+def extract_symbols(coins_metadata: Any) -> List[str]:
+    """
+    Extract symbols from different possible JSON shapes.
+    Returns a list like: ["BTC", "ETH"]
+    """
+    symbols: List[str] = []
+
+    # case 1: list of dicts
+    if isinstance(coins_metadata, list):
+        for item in coins_metadata:
+            if isinstance(item, dict):
+                sym = item.get("symbol")
+                if isinstance(sym, str) and sym.strip():
+                    symbols.append(sym.strip())
+
+    # case 2: dict with a list under some key (your current coins.json is this case)
+    elif isinstance(coins_metadata, dict):
+        for key in ["coins", "assets", "data", "list"]:
+            if key in coins_metadata and isinstance(coins_metadata[key], list):
+                symbols.extend(extract_symbols(coins_metadata[key]))
+                break
+
+        # case 3: dict of coins keyed by symbol
+        if not symbols:
+            for k, item in coins_metadata.items():
+                if isinstance(item, dict):
+                    sym = item.get("symbol")
+                    if isinstance(sym, str) and sym.strip():
+                        symbols.append(sym.strip())
+                elif isinstance(k, str) and k.strip():
+                    # if it's keyed by symbol (fallback)
+                    symbols.append(k.strip())
+
+    # de-duplicate while preserving order
+    seen = set()
+    out = []
+    for s in symbols:
+        if s not in seen:
+            out.append(s)
+            seen.add(s)
+    return out
+
