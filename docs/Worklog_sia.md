@@ -528,4 +528,197 @@ print(w)
     infeasible constraint checks.
 
 
+<span style="color:red"><h5>
+W5 – Model Validation on Small Dataset + Sanity Checks
+
+</h5></span>
+
+1. Objective
+
+The objective of this task was to implement systematic validation and
+sanity checks across the core quantitative modules developed in Week
+5.
+
+Unlike smoke tests or demo scripts, this milestone focused on:
+
+Verifying numerical stability.
+
+Detecting NaN / infinite value propagation.
+
+Ensuring deterministic outputs.
+
+Validating structural consistency of returned objects.
+
+Confirming rule-based allocation logic behaves correctly under different risk regimes.
+
+This step establishes confidence and reproducibility before further
+refactoring and CI integration.
+
+2. Context
+
+This validation layer was built on top of previously completed W5
+modules:
+
+Feature Engineering (build_features_basic)
+
+Probabilistic Scenario Engine (ScenarioEngine)
+
+Agent Allocation Logic (allocate_weights)
+
+The goal was to ensure all core components behave correctly in
+controlled conditions before expanding the system further.
+
+3. Repository Structure Used
+
+root/
+├── tests/
+│   ├── test_w5_sanity_features.py
+│   ├── test_w5_sanity_scenario_engine.py
+│   └── test_w5_sanity_allocation_rules.py
+├── data/
+│   └── sample/
+│       └── sampleData_Test_Modelsanity.csv
+└── core/
+    ├── features/
+    ├── pipelines/
+    └── portfolio/
+
+
+4. Validation Methodology
+
+Validation was performed using pytest-based deterministic unit tests.
+
+Three levels of validation were implemented:
+
+4.1 Feature Engineering Sanity Checks
+
+Verified that:
+
+Rolling return and volatility features are correctly computed.
+
+Required columns are present.
+
+NaN values only appear where mathematically expected.
+
+No infinite values propagate.
+
+Drawdown values are non-positive.
+
+Volatility values are non-negative.
+
+This ensures the statistical foundation feeding the scenario engine is numerically stable.
+
+4.2 Scenario Engine Validation
+
+The Monte Carlo engine was validated for:
+
+Proper dictionary structure in returned output.
+
+Correct simulation matrix dimensions.
+
+No NaN or infinite values in simulated paths.
+
+Quantile ordering consistency:
+
+p05 ≤ p50 ≤ p95
+
+Consistency between simulated terminal distribution and summary statistics.
+
+This confirms that stochastic simulation is structurally sound and internally coherent.
+
+4.3 Agent Allocation Logic Validation
+
+Allocation logic was validated under multiple scenarios:
+
+Weights sum exactly to 1.0.
+
+No negative or invalid weights.
+
+Respect for:
+
+max_positions
+
+max_weight_per_asset
+
+min_weight_per_asset
+
+Behavioral differentiation between:
+
+Conservative
+
+Moderate
+
+Aggressive risk tolerances.
+
+This ensures deterministic and explainable allocation behavior.
+
+5. Key Design Decisions
+
+Validation focused on numerical sanity, not predictive performance.
+
+Tests use deterministic inputs to guarantee reproducibility.
+
+No reliance on live APIs during validation.
+
+Explicit structural assertions to protect downstream API layers.
+
+6. Risk Mitigation Impact
+
+This validation layer reduces the risk of:
+
+Risk Mitigation
+
+Silent NaN propagation Explicit assertions in tests
+Allocation instability Weight sum validation
+Schema mismatch Column existence checks
+Monte Carlo drift errors Distribution consistency checks
+Regression bugs Pytest-based coverage
+
+7. Limitations
+
+Current validation does not yet include:
+
+Statistical goodness-of-fit tests.
+
+Distribution comparison tests.
+
+Stress testing under extreme volatility regimes.
+
+Cross-asset portfolio interaction testing.
+
+8. Strategic Impact
+
+This task transforms the project from:
+
+“Prototype with working demo”
+
+into:
+
+“Validated quantitative system with structural guarantees.”
+
+It enables safe:
+
+Refactoring (W6)
+
+CI integration
+
+Future ML upgrades
+
+API stabilization
+
+9. Summary
+
+W5 model validation successfully delivered:
+
+Deterministic sanity tests for core modules.
+
+Structural and numerical integrity verification.
+
+Stable baseline before W6 refactoring and CI setup.
+
+This marks the transition from prototype-level confidence to system-level reliability.
+
+Notes: Since we are short in time, and since we don't push data to github, I skipped W6 code review and branch protection and basic CI
+
+
 *End of W5 Worklog.*
