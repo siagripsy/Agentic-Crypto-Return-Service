@@ -4,9 +4,11 @@
 
 
 
-<span style="color:red"><h5>
-W5 -- Data Ingestion Pipeline (Daily OHLCV) + Storage Format
-</h5></span>
+
+<h1 style="background-color:powderblue;">W5 -- Data Ingestion Pipeline (Daily OHLCV) + Storage Format</h1>
+
+
+
 ------------------------------------------------------------------------
 
 ## 1. Objective
@@ -240,9 +242,10 @@ modeling and agentic layers.
 
 
 
-<span style="color:red"><h5>
-W5  Initial Probabilistic Scenario Engine Baseline
-</h5></span>
+<h1 style="background-color:powderblue;">W5  Initial Probabilistic Scenario Engine Baseline</h1>
+
+
+
 ------------------------------------------------------------------------
 
 ## 1. Objective
@@ -456,9 +459,9 @@ This establishes the quantitative backbone of the project.
 ------------------------------------------------------------------------
 
 
-<span style="color:red"><h5>
-W5 Agent Decision Logic Baseline
-</h5></span>
+<h1 style="background-color:powderblue;">W5 Agent Decision Logic Baseline</h1>
+
+
 ------------------------------------------------------------------------
 
 
@@ -528,10 +531,10 @@ print(w)
     infeasible constraint checks.
 
 
-<span style="color:red"><h5>
-W5 – Model Validation on Small Dataset + Sanity Checks
+<h1 style="background-color:powderblue;">W5 – Model Validation on Small Dataset + Sanity Checks</h1>
 
-</h5></span>
+
+
 
 1. Objective
 
@@ -724,9 +727,9 @@ Notes: Since we are short in time, and since we don't push data to github, I ski
 *End of W5 Worklog.*
 
 
-<span style="color:red"><h5>
-W7 – Enhance Probabilistic Model (Quantile ML Walk Forward + Metrics Output)
-</h5></span>
+<h1 style="background-color:powderblue;">W7 – Enhance Probabilistic Model (Quantile ML Walk Forward + Metrics Output)</h1>
+
+
 ------------------------------------------------------------------------
 
 ## 1. Objective
@@ -937,9 +940,9 @@ This completes a core “engine layer” needed before regime similarity analysi
 
 ------------------------------------------------------------------------
 
-<span style="color:red"><h5>
-W7 – Regime Detection & Historical Matching (AI Similarity Engine)
-</h5></span>
+<h1 style="background-color:powderblue;">W7 – Regime Detection & Historical Matching (AI Similarity Engine)</h1>
+
+
 ------------------------------------------------------------------------
 
 ## 1. Objective
