@@ -156,7 +156,7 @@ def sample_from_quantiles(
 
     Method:
     - Approximate the CDF by linear interpolation between predicted quantile points.
-    - Sample u ~ Uniform(0,1), map through inverse CDF.
+    - Sample u ~ Uniform(0,1), map through inverse CDF     .
     - CDF (Cumulative Distribution Function): What is the probability the outcome is less than or equal to x?
 
     Note:

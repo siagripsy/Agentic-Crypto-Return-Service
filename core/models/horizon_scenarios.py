@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Dict, Optional, Tuple
-
+from typing import Literal
 import numpy as np
 import pandas as pd
 
@@ -134,7 +134,7 @@ def forecast_horizon(
     horizon_days: Optional[int] = None,
     n_scenarios: int = 5000,
     alpha: float = 0.05,
-    seed: int = 42,
+    seed: int = 42
 ) -> HorizonForecast:
     """
     General horizon forecast API.
@@ -172,6 +172,7 @@ def forecast_horizon(
         horizon_days=h,
         n_scenarios=n_scenarios,
         seed=seed,
+        
     )
 
     VaR, CVaR = var_cvar(samples, alpha=alpha)
