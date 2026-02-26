@@ -936,3 +936,262 @@ W7 successfully delivered:
 This completes a core “engine layer” needed before regime similarity analysis and portfolio recommendation refinement.
 
 ------------------------------------------------------------------------
+
+<span style="color:red"><h5>
+W7 – Regime Detection & Historical Matching (AI Similarity Engine)
+</h5></span>
+------------------------------------------------------------------------
+
+## 1. Objective
+
+The objective of this milestone was to implement an **AI-based regime detection and historical similarity engine** to complement the probabilistic scenario engine.
+
+Unlike W5 Monte Carlo and W7 quantile ML forecasting, this module:
+
+- Identifies historical market regimes similar to the current market state.
+- Uses a learned latent representation instead of raw feature distance.
+- Retrieves the top-N most similar historical windows.
+- Evaluates forward performance of those windows over a user-defined horizon.
+- Outputs interpretable probability and risk statistics.
+
+This module provides **contextual intelligence** to the agent layer.
+
+------------------------------------------------------------------------
+
+## 2. Conceptual Design
+
+The system separates:
+
+**Training configuration (model-level parameters):**
+- match_window_days
+- similarity_metric
+- embargo_days
+- latent_dim
+
+**Runtime query parameters (user-level inputs):**
+- top_n
+- horizon_days
+
+Key architectural principle:
+The similarity model must be independent from user horizon selection.
+Horizon is only applied after similar regimes are identified.
+
+------------------------------------------------------------------------
+
+## 3. Methodology
+
+### 3.1 Rolling Window Construction
+
+From feature-engineered datasets:
+
+    data/processed/features/{COIN}_features.csv
+
+We construct rolling windows of length:
+
+    match_window_days
+
+Each window contains:
+
+- log returns (1d, 5d, 10d)
+- volatility metrics
+- risk-adjusted return
+- volatility ratio
+- drawdown
+
+Windows slide one day at a time.
+
+------------------------------------------------------------------------
+
+### 3.2 Autoencoder (Latent Representation Learning)
+
+A PyTorch Autoencoder was implemented:
+
+    core/models/regime_autoencoder.py
+
+Architecture:
+
+Input (W × F) → Flatten → Dense layers → Latent vector (dim=16)
+
+Purpose:
+
+- Learn compressed representation of market regime.
+- Remove noise and redundant correlations.
+- Provide geometry for similarity search.
+
+Training loss:
+
+- Mean Squared Error (reconstruction loss)
+
+Artifacts saved per coin:
+
+    artifacts/models/{TICKER}/
+        ├── regime_ae.pt
+        ├── regime_scaler.pkl
+        └── regime_train_config.pkl
+
+Example:
+
+    artifacts/models/BTC-USD/regime_ae.pt
+
+------------------------------------------------------------------------
+
+### 3.3 Similarity Search
+
+After encoding all windows:
+
+- Latent embeddings are generated.
+- The most recent window is used as the query regime.
+- KNN search performed using:
+
+    cosine distance
+
+Top-N historical regimes are retrieved while excluding:
+
+    embargo_days
+
+This avoids trivial near-duplicate windows.
+
+------------------------------------------------------------------------
+
+### 3.4 Forward Evaluation
+
+For each matched historical window:
+
+1. Identify its forward horizon.
+2. Compute:
+   - Profit percentage
+   - Maximum drawdown
+3. Aggregate statistics across top-N windows.
+
+Outputs include:
+
+- Probability of profit
+- Mean / max / min profit
+- Mean / worst loss
+- Mean / worst max drawdown
+
+This produces a distribution-based historical analogue forecast.
+
+------------------------------------------------------------------------
+
+## 4. Repository Structure Used
+
+    root/
+    ├── core/
+    │   └── regime_detection/
+    │       ├── historical_matching.py
+    │       └── regime_detection.py
+    ├── core/
+    │   └── models/
+    │       └── regime_autoencoder.py
+    ├── artifacts/
+    │   └── models/
+    │       ├── BTC-USD/
+    │       │   ├── regime_ae.pt
+    │       │   ├── regime_scaler.pkl
+    │       │   └── regime_train_config.pkl
+    │       └── ...
+    └── notebooks/
+        └── Test_Demo.ipynb
+
+------------------------------------------------------------------------
+
+## 5. Development Workflow
+
+### 5.1 Feature Branch
+
+All work was completed in:
+
+    w7-enhance-prob-model-sia
+
+------------------------------------------------------------------------
+
+### 5.2 Environment
+
+All experiments and training were executed under:
+
+    Capstone_env
+
+to ensure dependency stability and reproducibility.
+
+------------------------------------------------------------------------
+
+## 6. Key Design Decisions
+
+- Autoencoder chosen over raw Euclidean feature distance.
+- Cosine similarity used for regime comparison.
+- Clear separation between training config and query config.
+- Horizon is dynamic and not baked into the model.
+- Artifacts stored per coin for modular scalability.
+- Model retraining avoided unless explicitly forced.
+
+------------------------------------------------------------------------
+
+## 7. Example Output Structure
+
+The regime engine returns:
+
+    {
+      "current_window": {...},
+      "matches": [...],
+      "summary": {...},
+      "used_cached_model": bool
+    }
+
+Summary includes:
+
+- n_evaluated
+- prob_profit
+- profit_analysis
+- loss_analysis
+- drawdown_analysis
+
+------------------------------------------------------------------------
+
+## 8. Strategic Impact
+
+This module upgrades the system from:
+
+“Forecast-only probabilistic engine”
+
+to:
+
+“Regime-aware intelligent agent”
+
+It enables:
+
+- Historical analogue reasoning
+- Regime-conditioned risk awareness
+- More informed portfolio allocation decisions
+- Future integration with LLM-based explanations
+
+------------------------------------------------------------------------
+
+## 9. Limitations and Future Improvements
+
+Current version:
+
+- Single latent dimension architecture (fixed depth).
+- No clustering or regime labeling yet.
+- No cross-asset regime comparison.
+- No statistical validation of embedding separability.
+
+Future upgrades:
+
+- Add clustering layer on embeddings.
+- Introduce regime classification labels.
+- Compare cross-asset synchronized regimes.
+- Integrate with portfolio risk weighting logic.
+
+------------------------------------------------------------------------
+
+## 10. Summary
+
+W7 Regime Detection successfully delivered:
+
+- AI-based similarity learning per asset.
+- Top-N historical regime retrieval.
+- Forward performance evaluation over dynamic horizon.
+- Scalable artifact-based architecture.
+
+This completes the regime intelligence layer required before full agent-based portfolio orchestration.
