@@ -1198,3 +1198,208 @@ W7 Regime Detection successfully delivered:
 - Scalable artifact-based architecture.
 
 This completes the regime intelligence layer required before full agent-based portfolio orchestration.
+
+<h1 style="background-color:powderblue;">W8 – Risk Assessment + Portfolio Allocation (New Agent Layer)</h1>
+
+------------------------------------------------------------------------
+
+## 1. Objective
+
+The objective of this task was to complete the **Risk assessment and Portfolio allocation** layer so the system can:
+
+- Convert scenario-engine outputs into **risk diagnostics** per asset.
+- Convert user risk tolerance into **portfolio weights** across selected assets.
+- Provide a stable orchestrator module that can be used later by:
+  - UI inputs
+  - LLM explanation layer
+  - API service layer
+
+This work is designed as a production-style module (not a demo-only notebook hack).
+
+------------------------------------------------------------------------
+
+## 2. Context and Dependencies
+
+This work builds on:
+
+- `core/pipelines/scenario_engine.py` which produces scenario paths and scenario-based metrics.
+- `core/models/scenario_metrics.py` which outputs probability of profit, VaR/CVaR (horizon return), and max drawdown metrics.
+- The demo flow in `notebooks/Test_Demo.ipynb` where Step 5 generates scenarios per user-selected assets.
+
+We intentionally treated existing `core/portfolio/allocation_rules.py` as **legacy/demo baseline** from W5 and rewrote the portfolio logic for the new agent layer.
+
+------------------------------------------------------------------------
+
+## 3. Repository Structure Used
+
+    root/
+    ├── core/
+    │   ├── risk/
+    │   │   ├── __init__.py
+    │   │   ├── risk.py
+    │   │   └── schemas.py
+    │   ├── portfolio/
+    │   │   ├── __init__.py
+    │   │   └── allocation_rules.py   (legacy/demo wrapper only)
+    │   └── pipelines/
+    │       └── portfolio_pipeline.py
+    ├── tests/
+    │   ├── test_risk_compute_risk.py
+    │   ├── test_portfolio_build_portfolio.py
+    │   └── test_portfolio_pipeline_smoke.py
+    └── notebooks/
+        └── Test_Demo.ipynb   (Step 7 added to run allocation)
+
+------------------------------------------------------------------------
+
+## 4. Development Workflow
+
+### 4.1 Feature Branch
+
+All work was completed in:
+
+    feat-risk-portfolio-allocation
+
+### 4.2 Python Environment
+
+All runs and tests were executed under:
+
+    Capstone_env
+
+Confirmed `python` resolves to:
+
+    Capstone_env/Scripts/python.exe
+
+------------------------------------------------------------------------
+
+## 5. Methodology
+
+### 5.1 Risk Assessment Module (core/risk)
+
+We implemented a dedicated risk module that consumes the scenario-engine output and produces a consistent risk report.
+
+Key ideas:
+
+- Use scenario-engine `metrics` as the source of truth (already computed from scenario paths).
+- Convert/normalize the metrics into a `RiskReport` domain object.
+- Keep the schema stable for downstream layers (portfolio + explanation + API).
+
+Inputs:
+- Scenario output dict (must include `metrics`)
+
+Outputs:
+- `RiskReport` including:
+  - probability of profit
+  - downside tail risk proxy (CVaR from horizon return metrics)
+  - drawdown risk proxy (max drawdown metrics)
+  - additional diagnostics needed for scoring and allocation
+
+### 5.2 Portfolio Allocation (core/portfolio)
+
+We replaced the earlier W5 baseline allocation approach with a new logic designed for this project’s agent layer:
+
+- Allocation is now driven by:
+  - expected return (from scenario metrics)
+  - probability of profit
+  - tail risk (CVaR)
+  - drawdown risk (max drawdown estimate)
+- Portfolio constraints are represented by `PortfolioConstraints`, including:
+  - `user_risk_tolerance` (0..100)
+  - `max_weight_per_asset`, `min_weight_per_asset`
+  - `top_k`
+  - `allow_cash` (optional cash buffer behaviour)
+
+Important design decision:
+- If `allow_cash=True`, weights can include a `CASH` bucket and the sum of coin weights may be < 1.0.
+- If `allow_cash=False`, the allocation is normalized to sum to 1.0 across selected assets only.
+
+### 5.3 Portfolio Orchestrator Pipeline (core/pipelines/portfolio_pipeline.py)
+
+We implemented a reusable pipeline orchestrator to run the full chain:
+
+1) Run scenario engine per asset
+2) Compute risk report per asset
+3) Build portfolio allocation result
+
+This module is intended to be called later by the API service layer and UI input flow.
+
+Output structure:
+
+    {
+      "scenarios": {symbol: scenario_output},
+      "risks": {symbol: RiskReport},
+      "portfolio": PortfolioResult
+    }
+
+------------------------------------------------------------------------
+
+## 6. Tests and Validation
+
+We added and executed unit + integration style tests:
+
+- `test_risk_compute_risk.py`
+  - validates risk report creation from scenario metrics
+
+- `test_portfolio_build_portfolio.py`
+  - validates weight normalization and constraints behaviour
+
+- `test_portfolio_pipeline_smoke.py`
+  - end-to-end smoke test using synthetic dataframes (no external data dependency)
+
+Results:
+- All new tests passed consistently.
+
+Legacy cleanup:
+- The old W5 allocation test (`tests/test_allocation_rules.py`) was removed because it tested the deprecated baseline API and was not aligned with the new portfolio engine goals.
+
+------------------------------------------------------------------------
+
+## 7. Demo Integration (notebooks/Test_Demo.ipynb)
+
+We added a new Step 7 to the demo notebook:
+
+- Uses existing Step 5 scenario outputs (`metrics`) per user-selected asset.
+- Builds `RiskReport` per asset.
+- Produces a final suggested portfolio allocation using `build_portfolio`.
+
+A key fix in the notebook:
+- Step 5 and Step 6 used the same variable name `results`.
+- We separated them into:
+  - `scenario_results` for scenario generation output (includes `metrics`)
+  - `regime_results` for historical matching output (no `metrics`)
+This prevents KeyError conflicts when Step 7 reads scenario metrics.
+
+------------------------------------------------------------------------
+
+## 8. Key Design Decisions
+
+- Risk was implemented as its own module (`core/risk`) to match the interface contract and keep the agent layer clean.
+- Portfolio allocation is now scenario-driven (probabilistic), not rule-only.
+- A pipeline orchestrator was created in `core/pipelines` to support future API/UI integration.
+- Legacy W5 allocation rules remain only as a wrapper for older demos, but the new system no longer depends on them.
+
+------------------------------------------------------------------------
+
+## 9. Limitations
+
+Current version:
+
+- Portfolio optimization is heuristic (scoring-based) rather than formal mean-variance or CVaR-optimization solver.
+- Cross-asset correlations are not modelled yet (allocation is per-asset metric driven).
+- Cash handling is optional and controlled via constraints but is not yet fully integrated into UI/API response schemas.
+
+------------------------------------------------------------------------
+
+## 10. Summary
+
+W8 successfully delivered:
+
+- A dedicated risk module (`core/risk`) with stable risk report outputs.
+- A new portfolio allocation engine driven by scenario metrics and user risk tolerance.
+- An orchestrator pipeline to run scenario → risk → portfolio end-to-end.
+- A demo notebook Step 7 integration to prove the workflow works in practice.
+- A clean test suite aligned with the new architecture (legacy test removed).
+
+This completes the **Risk assessment and Portfolio allocation** requirement and prepares the project for the next layers: explanation (LLM) and UI/API integration.
+
+------------------------------------------------------------------------
