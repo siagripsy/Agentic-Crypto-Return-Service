@@ -29,6 +29,14 @@ def build_one(symbol: str, yahoo_ticker: str) -> Path:
 
     df_final = df_ohlcv.merge(df_mcap, on="date", how="left")
 
+    #--------------------------------
+    # Handle missing market cap values
+    #--------------------------------
+    # TODO: we should handle missing market cap values in order to use that feature in Risk assessment
+
+
+
+
     out_path = cfg.processed_root / "daily" / f"{symbol}_daily.csv"
     out_path.parent.mkdir(parents=True, exist_ok=True)
     df_final.to_csv(out_path, index=False)

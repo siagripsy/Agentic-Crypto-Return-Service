@@ -23,5 +23,6 @@ def read_last_date(path: Path, date_col: str = "date") -> Optional[str]:
     df = pd.read_csv(path)
     if df.empty or date_col not in df.columns:
         return None
+    df[date_col] = pd.to_datetime(df[date_col], errors='coerce')    
 
     return str(df[date_col].max())
