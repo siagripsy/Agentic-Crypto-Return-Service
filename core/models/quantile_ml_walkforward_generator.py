@@ -64,6 +64,10 @@ class QuantileMLWalkForwardScenarioGenerator(BaseScenarioGenerator):
         df = df.dropna(subset=["close"]).reset_index(drop=True)
         return df
 
+
+    # Given a history dataframe hist (real + simulated rows), it computes the features for the most recent day (the last row) 
+    # that are needed for the ML model to predict quantiles for the next return. It returns a dictionary of feature values.
+    # So each day’s “regime features” are consistent with your original feature engineering logic, but computed on-the-fly from the evolving path.
     def _compute_one_row_features(self, hist: pd.DataFrame) -> Dict[str, float]:
         close = hist["close"]
         r1 = hist["log_ret_1d"]
@@ -162,7 +166,7 @@ class QuantileMLWalkForwardScenarioGenerator(BaseScenarioGenerator):
         bundle = bundle_obj["bundle"]
         feature_cols = [c.lower() for c in bundle.feature_cols]
 
-        if len(df) < cfg.warmup_rows:
+        if len(df) < cfg.warmup_rows:   # Takes the last warmup_rows real observations as base history
             raise ValueError(f"Not enough rows for warmup. Need {cfg.warmup_rows}, got {len(df)}")
 
         rng = np.random.default_rng(seed)
@@ -172,7 +176,7 @@ class QuantileMLWalkForwardScenarioGenerator(BaseScenarioGenerator):
         paths[:, 0] = start_price
 
         base_hist = df.tail(cfg.warmup_rows).copy().reset_index(drop=True)
-        if "log_ret_1d" not in base_hist.columns:
+        if "log_ret_1d" not in base_hist.columns:        # Ensures log_ret_1d exists in history; if not, creates it from close.
             base_hist["log_ret_1d"] = np.log(base_hist["close"] / base_hist["close"].shift(1))
 
         # Pre-build u vectors per day (shared across scenarios) for stratified sampling

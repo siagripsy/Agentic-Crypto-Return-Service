@@ -24,6 +24,7 @@ def _var_cvar(x: np.ndarray, alpha: float) -> Dict[str, float]:
     return {"VaR": var, "CVaR": cvar}
 
 
+# computes running peak, computes drawdown = price/peak - 1, returns the most negative drawdown (worst peak-to-trough decline
 def _max_drawdown_from_prices(prices: np.ndarray) -> float:
     prices = np.asarray(prices, dtype=float)
     if len(prices) < 2 or not np.all(np.isfinite(prices)):
@@ -82,7 +83,7 @@ def compute_scenario_metrics(
     }
 
     # ===============================
-    # Probabilities
+    # Probabilities: “Out of all simulated futures, what fraction end up positive vs negative?”
     # ===============================
 
     prob_profit = float(np.mean(horizon_ret > 0))
@@ -95,7 +96,8 @@ def compute_scenario_metrics(
     risk_horizon = _var_cvar(horizon_ret, alpha=alpha)
 
     # ===============================
-    # Max Drawdown per path
+    # Max Drawdown per path, then summarize across paths. VaR/CVaR on max drawdown too
+    #So you get both:end-of-horizon loss risk and in-horizon crash risk
     # ===============================
 
     mdd = np.array([_max_drawdown_from_prices(p) for p in paths], dtype=float)

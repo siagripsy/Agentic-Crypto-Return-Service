@@ -11,9 +11,9 @@ from core.models.scenario_generator_base import BaseScenarioGenerator, ScenarioR
 
 @dataclass
 class RegimeSimilarityConfig:
-    k_similar: int = 50
-    min_history: int = 250
-    feature_cols: Tuple[str, ...] = (
+    k_similar: int = 50         # consider the 50 most similar historical days
+    min_history: int = 250           # require at least 250 days of history to run
+    feature_cols: Tuple[str, ...] = (     # which features define “regime similarity”
         "log_ret_5d",
         "log_ret_10d",
         "vol_7d",
@@ -22,7 +22,7 @@ class RegimeSimilarityConfig:
         "vol_ratio_7d_30d",
         "drawdown_30d",
     )
-    ret_col: str = "log_ret_1d"
+    ret_col: str = "log_ret_1d"           # the return series used to create future paths
 
 
 class RegimeSimilarityScenarioGenerator(BaseScenarioGenerator):
@@ -67,31 +67,37 @@ class RegimeSimilarityScenarioGenerator(BaseScenarioGenerator):
         if len(df) < cfg.min_history:
             raise ValueError(f"Need at least {cfg.min_history} rows, got {len(df)}")
 
-        return df
+        return df      # Output: a clean historical feature table.
 
+
+    # Similarity is measured by distance, so features must be on comparable scales
     def _standardize(self, X: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         mu = X.mean(axis=0)
         sd = X.std(axis=0, ddof=0)
-        sd = np.where(sd == 0, 1.0, sd)
+        sd = np.where(sd == 0, 1.0, sd)  # handles sd=0 by replacing with 1.0
         Z = (X - mu) / sd
         return Z, mu, sd
 
+
+    # find regimes like today
     def _find_similar(self, df: pd.DataFrame, cfg: RegimeSimilarityConfig) -> Tuple[np.ndarray, np.ndarray]:
         feats = [c.lower() for c in cfg.feature_cols]
-        X = df[feats].values.astype(float)
-
+        X = df[feats].values.astype(float)     # Build feature matrix X from the selected feature columns.
         Z, _, _ = self._standardize(X)
-        z_t = Z[-1]
-        Z_hist = Z[:-1]
 
-        d = np.sqrt(((Z_hist - z_t) ** 2).sum(axis=1))
+        z_t = Z[-1]           # today’s regime vector (latest row)
+        Z_hist = Z[:-1]       # all past regimes
+
+        d = np.sqrt(((Z_hist - z_t) ** 2).sum(axis=1))     # Compute Euclidean distance from today to each past day
 
         k = int(cfg.k_similar)
-        k = max(10, min(k, len(d)))
+        k = max(10, min(k, len(d)))        # Select indices of the smallest distances (k nearest neighbors
 
         idx = np.argsort(d)[:k]
-        return idx, d[idx]
+        return idx, d[idx]              # Output: indices of the k most similar historical days.
 
+
+    # turn similar days into future scenarios
     def _sample_future_returns(
         self,
         df: pd.DataFrame,
@@ -101,7 +107,7 @@ class RegimeSimilarityScenarioGenerator(BaseScenarioGenerator):
         n_scenarios: int,
         rng: np.random.Generator,
     ) -> Tuple[np.ndarray, List[pd.Timestamp]]:
-        # ensure we can read i+1 .. i+horizon
+        # ensure we can read i+1 .. i+horizon. not every historical day has enough “future” room (near the end of dataset).So it filters to those with enough future available
         max_i = len(df) - horizon_days - 1
         valid = similar_idx[similar_idx <= max_i]
 
@@ -111,18 +117,20 @@ class RegimeSimilarityScenarioGenerator(BaseScenarioGenerator):
                 "Reduce horizon_days or k_similar, or provide more history."
             )
 
-        chosen = rng.choice(valid, size=n_scenarios, replace=True)
+        chosen = rng.choice(valid, size=n_scenarios, replace=True) # randomly chooses n_scenarios indices from the valid similar days (with replacement)
 
         ret_col = cfg.ret_col.lower()
-        blocks = np.zeros((n_scenarios, horizon_days), dtype=float)
+        blocks = np.zeros((n_scenarios, horizon_days), dtype=float) # for each chosen day, extracts the next horizon_days returns block
         chosen_dates: List[pd.Timestamp] = []
 
         for s, i in enumerate(chosen):
             blocks[s, :] = df[ret_col].iloc[i + 1 : i + 1 + horizon_days].values
-            chosen_dates.append(pd.to_datetime(df["date"].iloc[i]))
+            chosen_dates.append(pd.to_datetime(df["date"].iloc[i]))  # also stores which historical dates were used (for metadata)
 
         return blocks, chosen_dates
 
+
+    # Converts return blocks into price paths
     def _returns_to_paths(self, start_price: float, ret_blocks: np.ndarray) -> np.ndarray:
         cum = np.cumsum(ret_blocks, axis=1)
         prices = start_price * np.exp(cum)
