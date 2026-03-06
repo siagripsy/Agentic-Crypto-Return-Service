@@ -6,13 +6,7 @@ from typing import Any, Dict, List, Optional
 
 @dataclass
 class PortfolioConstraints:
-    """
-    user_risk_tolerance: 0..100 (0 = خیلی محافظه کار, 100 = خیلی ریسک پذیر)
-    max_weight_per_asset: سقف وزن هر دارایی
-    min_weight_per_asset: کف وزن هر دارایی (اگر در لیست انتخاب شد)
-    top_k: حداکثر تعداد کوین هایی که داخل پورتفوی می آیند
-    allow_cash: اگر True باشد بخشی از پورتفوی می تواند نقد باشد
-    """
+
     user_risk_tolerance: float
     max_weight_per_asset: float = 0.40
     min_weight_per_asset: float = 0.00
