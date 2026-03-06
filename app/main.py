@@ -26,13 +26,15 @@ from core.models.probabilistic_quantile import var_cvar
 from core.pipelines.scenario_engine import ScenarioEngine, ScenarioConfig
 from core.models.scenario_metrics import compute_scenario_metrics, MetricsConfig
 
-# Portfolio stack (teammate changes)
+# NEW: portfolio stack (teammate changes)
 from core.pipelines.portfolio_pipeline import run_portfolio_pipeline, PortfolioPipelineConfig
-from core.risk.schemas import RiskReport
+from core.risk.schemas import RiskConfig, RiskReport
 
-# Needed to rebuild portfolio after conservative risk merge (ensemble)
-from core.portfolio.portfolio import build_portfolio
-from core.portfolio.schemas import PortfolioConstraints
+# Explanation engine (LLM-first + deterministic fallback)
+from core.explain.explanation_agent import load_explanation_engine_from_env
+from core.explain.fallback import explain_forecast_fallback, explain_portfolio_fallback
+
+from fastapi.middleware.cors import CORSMiddleware
 
 
 app = FastAPI(
@@ -41,6 +43,16 @@ app = FastAPI(
     description="API for probabilistic crypto risk forecasting using multiple scenario engines + portfolio layer.",
 )
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # -----------------------------
 # Error handling
@@ -94,6 +106,9 @@ ENGINE_TO_MODEL_TYPE = {
 MODEL_TYPE_A = "quantile_ml_walk_forward"
 MODEL_TYPE_B = "regime_similarity"
 
+# Global explanation engine (safe: falls back if disabled/unconfigured)
+EXPLAIN_ENGINE = load_explanation_engine_from_env()
+
 
 # -----------------------------
 # Utilities
@@ -107,6 +122,171 @@ def _as_jsonable(x: Any) -> Any:
     if isinstance(x, (list, tuple)):
         return [_as_jsonable(v) for v in x]
     return x
+
+
+# -----------------------------
+# Explanation engine (fallback-first, LLM-ready)
+# -----------------------------
+EXPLANATION_DISCLAIMER = (
+    "Disclaimer: This is an educational, automatically generated explanation. "
+    "It is not financial advice and does not guarantee future performance."
+)
+
+
+
+# -----------------------------
+# Explanation helpers
+# -----------------------------
+def _pydantic_dump(model: Any) -> Dict[str, Any]:
+    """Pydantic v1/v2 compatible dump to dict."""
+    if hasattr(model, "model_dump"):
+        return model.model_dump()
+    return model.dict()  # type: ignore[return-value]
+
+
+async def _build_explanation(
+    *,
+    target: str,
+    mode: str,
+    payload: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Return an explanation dict. If mode='fallback', force deterministic fallback."""
+    if mode == "fallback":
+        return explain_portfolio_fallback(payload) if target == "portfolio" else explain_forecast_fallback(payload)
+    # mode == "llm" (LLM-first engine will still fallback safely if unconfigured)
+    return await EXPLAIN_ENGINE.explain(target=target, payload=payload)
+
+def _fmt_pct(x: Optional[float]) -> Optional[str]:
+    if x is None:
+        return None
+    try:
+        return f"{100.0 * float(x):.2f}%"
+    except Exception:
+        return None
+
+
+def build_fallback_forecast_explanation(
+    *,
+    symbol: str,
+    engine: str,
+    horizon_days: int,
+    alpha: float,
+    return_format: str,
+    summary: Optional[Dict[str, Any]],
+    metrics: Optional[Dict[str, Any]],
+) -> Dict[str, Any]:
+    """
+    Deterministic explanation based on returned fields.
+    Kept simple + stable for zero-cost deployments.
+    """
+    bullets: List[str] = []
+    bullets.append(f"Symbol: {symbol}")
+    bullets.append(f"Engine: {engine} (scenario generator)")
+    bullets.append(f"Horizon: {horizon_days} day(s)")
+    bullets.append(f"Tail risk alpha: {alpha} (lower = more conservative tail focus)")
+    bullets.append(f"Return format: {return_format}")
+
+    # Regime-fixed summaries
+    if summary:
+        for k in ["mean", "median", "p05", "p95"]:
+            if k in summary:
+                bullets.append(f"Summary {k}: {summary[k]}")
+        for k in ["VaR_5", "CVaR_5", "VaR_1", "CVaR_1", "VaR_10", "CVaR_10"]:
+            if k in summary:
+                bullets.append(f"{k}: {summary[k]}")
+
+    # Path-engine metrics (can be nested under log/simple/both)
+    if metrics:
+        m = metrics
+        if isinstance(metrics, dict) and "log" in metrics and "simple" in metrics:
+            # choose log for narrative by default
+            m = metrics.get("log") or metrics
+
+        if isinstance(m, dict):
+            hrs = m.get("horizon_return_summary")
+            if isinstance(hrs, dict):
+                for k in ["mean", "median", "p05", "p95"]:
+                    if k in hrs:
+                        bullets.append(f"Horizon return {k}: {hrs[k]}")
+
+            pp = m.get("prob_profit")
+            pl = m.get("prob_loss")
+            if pp is not None:
+                bullets.append(f"Probability of profit: {_fmt_pct(pp) or pp}")
+            if pl is not None:
+                bullets.append(f"Probability of loss: {_fmt_pct(pl) or pl}")
+
+            vc = m.get("VaR_CVaR_horizon_return")
+            if isinstance(vc, dict):
+                if "VaR" in vc:
+                    bullets.append(f"VaR (horizon return): {vc['VaR']}")
+                if "CVaR" in vc:
+                    bullets.append(f"CVaR (horizon return): {vc['CVaR']}")
+
+    text = (
+        "How to read this forecast:\n"
+        "- Returns are simulated scenarios, not point predictions.\n"
+        "- VaR is the loss threshold at the chosen tail level; CVaR is the average loss beyond VaR.\n"
+        "- Higher prob_loss / more negative CVaR means higher downside risk.\n"
+    )
+
+    return {
+        "mode": "fallback",
+        "disclaimer": EXPLANATION_DISCLAIMER,
+        "highlights": bullets[:12],
+        "text": text,
+    }
+
+
+def build_fallback_portfolio_explanation(
+    *,
+    engine: str,
+    symbols: List[str],
+    horizon_days: int,
+    confidence_levels: List[float],
+    portfolio: Dict[str, Any],
+    risks: Dict[str, Any],
+) -> Dict[str, Any]:
+    bullets: List[str] = []
+    bullets.append(f"Engine: {engine}")
+    bullets.append(f"Assets evaluated: {', '.join(symbols)}")
+    bullets.append(f"Horizon: {horizon_days} day(s)")
+    bullets.append(f"Confidence levels: {confidence_levels}")
+
+    weights = portfolio.get("weights", {})
+    if isinstance(weights, dict) and weights:
+        top = sorted(weights.items(), key=lambda kv: float(kv[1]), reverse=True)[:5]
+        bullets.append("Top weights: " + ", ".join([f"{k}={v:.3f}" for k, v in top]))
+
+    if risks and confidence_levels:
+        conf_key = f"p{int(round(confidence_levels[0]*100))}"
+        worst = None
+        for sym, rr in risks.items():
+            try:
+                c = rr.get("cvar", {}).get(conf_key)
+                if c is None:
+                    continue
+                c = float(c)
+                if worst is None or c < worst[1]:
+                    worst = (sym, c)
+            except Exception:
+                continue
+        if worst:
+            bullets.append(f"Worst CVaR at {conf_key}: {worst[0]} ({worst[1]})")
+
+    text = (
+        "How to read this portfolio:\n"
+        "- Weights are a suggested allocation under the provided constraints.\n"
+        "- Risk metrics are scenario-based estimates (VaR/CVaR, drawdown).\n"
+        "- Cash may be included if allow_cash=true and the optimizer prefers it under risk tolerance.\n"
+    )
+
+    return {
+        "mode": "fallback",
+        "disclaimer": EXPLANATION_DISCLAIMER,
+        "highlights": bullets[:12],
+        "text": text,
+    }
 
 
 def log_to_simple(x: float) -> float:
@@ -206,10 +386,7 @@ def load_features_df(symbol: str) -> pd.DataFrame:
     if not path.exists():
         raise FileNotFoundError(f"Features CSV not found: {path}")
     df = pd.read_csv(path)
-
-    # If your feature CSV date is non-uniform, this warning is normal. You can specify a format later.
-    df["date"] = pd.to_datetime(df["date"], errors="coerce")
-
+    df["date"] = pd.to_datetime(df["date"], format="%Y-%m-%d", errors="coerce")
     df = df.dropna(subset=["date"]).sort_values("date").reset_index(drop=True)
     return df
 
@@ -217,7 +394,8 @@ def load_features_df(symbol: str) -> pd.DataFrame:
 def load_price_df(symbol: str) -> pd.DataFrame:
     """
     Portfolio pipeline expects a 'price_df' per asset.
-    Load from data/raw/ohlcv/<YAHOO_TICKER>_daily.csv (ex: BTC-USD_daily.csv).
+    We load from data/raw/ohlcv/<YAHOO_TICKER>_daily.csv (ex: BTC-USD_daily.csv),
+    and keep at least date/close columns.
     """
     global _SYMBOL_TO_TICKER
     sym = symbol.upper().strip()
@@ -291,7 +469,7 @@ def _convert_metrics_returns_to_simple(metrics: Dict[str, Any]) -> Dict[str, Any
     For return_format="simple", convert return-type fields to simple returns.
     Note: drawdown is already a simple percentage drawdown (negative), so we keep it.
     """
-    m = json.loads(json.dumps(metrics))  # deep-ish copy
+    m = json.loads(json.dumps(metrics))  # deep-ish copy (safe for JSON-like dicts)
 
     def conv(x):
         try:
@@ -329,12 +507,22 @@ def compute_metrics_and_curve(
     alphas: Optional[List[float]],
     return_format: str,
 ) -> Dict[str, Any]:
+    """
+    Returns:
+      {
+        "metrics": {...},                 # computed at primary_alpha
+        "risk_curve_metrics": {...}|None  # multi-alpha metrics subset
+      }
+    """
     metrics = compute_scenario_metrics(paths, cfg=MetricsConfig(alpha=primary_alpha, use_log_returns=True))
 
     if return_format == "simple":
         metrics = _convert_metrics_returns_to_simple(metrics)
     elif return_format == "both":
-        metrics = {"log": metrics, "simple": _convert_metrics_returns_to_simple(metrics)}
+        metrics = {
+            "log": metrics,
+            "simple": _convert_metrics_returns_to_simple(metrics),
+        }
 
     risk_curve_metrics: Optional[Dict[str, Any]] = None
     if alphas is not None:
@@ -374,7 +562,12 @@ def compute_metrics_and_curve(
 
 
 def conservative_merge_metrics(a: Dict[str, Any], b: Dict[str, Any]) -> Dict[str, Any]:
-    """Conservative merge for FULL metrics dict."""
+    """
+    Conservative merge for FULL metrics dict:
+    - worse tail risk (more negative VaR/CVaR)
+    - higher prob_loss, lower prob_profit
+    - lower upside
+    """
     out = json.loads(json.dumps(a))
 
     def get(d, *path, default=None):
@@ -428,7 +621,10 @@ def conservative_merge_metrics(a: Dict[str, Any], b: Dict[str, Any]) -> Dict[str
 
 
 def conservative_merge_tail_only(a: Dict[str, Any], b: Dict[str, Any]) -> Dict[str, Any]:
-    """Conservative merge for tail-only dict used in risk_curve_metrics."""
+    """
+    Conservative merge for the SMALL tail-only dict used in risk_curve_metrics:
+      { VaR_CVaR_horizon_return: {VaR,CVaR}, VaR_CVaR_max_drawdown: {VaR,CVaR} }
+    """
     out: Dict[str, Any] = {}
     out["VaR_CVaR_horizon_return"] = {
         "VaR": min(float(a["VaR_CVaR_horizon_return"]["VaR"]), float(b["VaR_CVaR_horizon_return"]["VaR"])),
@@ -441,156 +637,74 @@ def conservative_merge_tail_only(a: Dict[str, Any], b: Dict[str, Any]) -> Dict[s
     return out
 
 
-from typing import Dict, Any, List
-import re
-
 def _merge_risk_reports_conservative(a: RiskReport, b: RiskReport) -> RiskReport:
     """
     Conservative merge for RiskReport:
-    - var/cvar dicts: take worse tail (more negative)
-    - max_drawdown_est: worse (more negative)
-    - tail_metrics:
-        * prob_loss: max
-        * prob_profit: min
-        * summary blocks: percentile-aware merge (p05 vs p95 etc.)
-    - notes: include "ensemble" marker
+    - var/cvar dictionaries: take worse tail (more negative)
+    - max_drawdown_est: take worse (more negative), handling None safely
+    - tail_metrics: conservative prob_loss/profit if present
     """
 
-    # --------------------
-    # helpers
-    # --------------------
-    def _is_number(x: Any) -> bool:
-        try:
-            float(x)
-            return True
-        except Exception:
-            return False
-
-    def _merge_scalar(key: str, va: Any, vb: Any, *, block: str) -> Any:
-        """
-        Percentile-aware merge rule.
-        - downside percentiles (p01/p05/p10): min
-        - upside percentiles (p90/p95/p99): max
-        - mean/median: keep A (stable)
-        - otherwise: if numeric -> keep A (stable), else prefer A then B
-        """
-        if va is None:
-            return vb
-        if vb is None:
-            return va
-
-        # non-numeric => prefer A
-        if not (_is_number(va) and _is_number(vb)):
-            return va
-
-        fa, fb = float(va), float(vb)
-
-        k = str(key).lower().strip()
-
-        # mean/median: keep A (or choose min if you want pessimistic mean)
-        if k in {"mean", "median"}:
-            return fa
-
-        # detect pXX patterns
-        m = re.match(r"p(\d{1,2})$", k)
-        if m:
-            p = int(m.group(1))
-            # downside
-            if p <= 10:
-                return min(fa, fb)
-            # upside
-            if p >= 90:
-                return max(fa, fb)
-            # middle percentiles: keep A
-            return fa
-
-        # fallback numeric fields: keep A
-        return fa
-
-    def _merge_block(block_name: str, da: Dict[str, Any], db: Dict[str, Any]) -> Dict[str, Any]:
-        out: Dict[str, Any] = {}
-        for kk in set(da.keys()) | set(db.keys()):
-            out[kk] = _merge_scalar(kk, da.get(kk), db.get(kk), block=block_name)
-        return out
-
-    # --------------------
-    # var/cvar (worse tail)
-    # --------------------
     var: Dict[str, float] = {}
     cvar: Dict[str, float] = {}
 
-    a_var = getattr(a, "var", {}) or {}
-    b_var = getattr(b, "var", {}) or {}
-    a_cvar = getattr(a, "cvar", {}) or {}
-    b_cvar = getattr(b, "cvar", {}) or {}
-
-    for k in set(a_var.keys()) | set(b_var.keys()):
-        if k in a_var and k in b_var:
-            var[k] = min(float(a_var[k]), float(b_var[k]))
+    for k in set(a.var.keys()) | set(b.var.keys()):
+        if k in a.var and k in b.var:
+            var[k] = min(float(a.var[k]), float(b.var[k]))
+        elif k in a.var:
+            var[k] = float(a.var[k])
         else:
-            var[k] = float(a_var.get(k, b_var.get(k)))  # type: ignore[arg-type]
+            var[k] = float(b.var[k])
 
-    for k in set(a_cvar.keys()) | set(b_cvar.keys()):
-        if k in a_cvar and k in b_cvar:
-            cvar[k] = min(float(a_cvar[k]), float(b_cvar[k]))
+    for k in set(a.cvar.keys()) | set(b.cvar.keys()):
+        if k in a.cvar and k in b.cvar:
+            cvar[k] = min(float(a.cvar[k]), float(b.cvar[k]))
+        elif k in a.cvar:
+            cvar[k] = float(a.cvar[k])
         else:
-            cvar[k] = float(a_cvar.get(k, b_cvar.get(k)))  # type: ignore[arg-type]
+            cvar[k] = float(b.cvar[k])
 
-    # --------------------
-    # max drawdown (worse)
-    # --------------------
-    max_dd = min(float(getattr(a, "max_drawdown_est")), float(getattr(b, "max_drawdown_est")))
+    if a.max_drawdown_est is None and b.max_drawdown_est is None:
+        max_dd = None
+    elif a.max_drawdown_est is None:
+        max_dd = float(b.max_drawdown_est)
+    elif b.max_drawdown_est is None:
+        max_dd = float(a.max_drawdown_est)
+    else:
+        max_dd = min(float(a.max_drawdown_est), float(b.max_drawdown_est))
 
-    # --------------------
-    # tail metrics merge
-    # --------------------
-    ta = getattr(a, "tail_metrics", None) or {}
-    tb = getattr(b, "tail_metrics", None) or {}
-    tail: Dict[str, Any] = dict(ta)
+    tail: Dict[str, Any] = {}
+    tail.update(a.tail_metrics or {})
+    tb = b.tail_metrics or {}
 
-    if "prob_loss" in ta or "prob_loss" in tb:
-        tail["prob_loss"] = max(float(ta.get("prob_loss", 0.0)), float(tb.get("prob_loss", 0.0)))
-    if "prob_profit" in ta or "prob_profit" in tb:
-        tail["prob_profit"] = min(float(ta.get("prob_profit", 1.0)), float(tb.get("prob_profit", 1.0)))
+    if "prob_loss" in tail or "prob_loss" in tb:
+        tail["prob_loss"] = max(
+            float(tail.get("prob_loss", 0.0)),
+            float(tb.get("prob_loss", 0.0)),
+        )
 
-    # Percentile-aware merge for summary blocks
-    for block in ["horizon_return_summary", "terminal_price_summary", "max_drawdown_summary"]:
-        if isinstance(ta.get(block), dict) and isinstance(tb.get(block), dict):
-            tail[block] = _merge_block(block, ta[block], tb[block])
+    if "prob_profit" in tail or "prob_profit" in tb:
+        tail["prob_profit"] = min(
+            float(tail.get("prob_profit", 1.0)),
+            float(tb.get("prob_profit", 1.0)),
+        )
 
-    # --------------------
-    # identity fields + notes
-    # --------------------
-    sym = getattr(a, "symbol", None) or getattr(a, "asset", None)
-    horizon_days = getattr(a, "horizon_days", None)
-    conf_levels = getattr(a, "confidence_levels", None)
+    notes: List[str] = []
+    if a.notes:
+        notes.extend(a.notes)
+    if b.notes:
+        notes.extend(b.notes)
+    notes.append("Conservative merge across engines (ensemble).")
 
-    notes_parts: List[str] = []
-    if getattr(a, "notes", None):
-        notes_parts.append(str(getattr(a, "notes")))
-    if getattr(b, "notes", None):
-        notes_parts.append(str(getattr(b, "notes")))
-    notes_parts.append("Conservative merge across engines (ensemble).")
-    notes = " ".join([p for p in notes_parts if p]).strip() or None
-
-    kwargs: Dict[str, Any] = {
-        "var": var,
-        "cvar": cvar,
-        "max_drawdown_est": max_dd,
-        "tail_metrics": tail,
-        "notes": notes,
-    }
-    if sym is not None:
-        if hasattr(a, "symbol"):
-            kwargs["symbol"] = sym
-        elif hasattr(a, "asset"):
-            kwargs["asset"] = sym
-    if horizon_days is not None and hasattr(a, "horizon_days"):
-        kwargs["horizon_days"] = horizon_days
-    if conf_levels is not None and hasattr(a, "confidence_levels"):
-        kwargs["confidence_levels"] = conf_levels
-
-    return RiskReport(**kwargs)  # type: ignore[arg-type]
+    return RiskReport(
+        symbol=a.symbol,
+        horizon_days=a.horizon_days,
+        var=var,
+        cvar=cvar,
+        max_drawdown_est=max_dd,
+        tail_metrics=tail,
+        notes=notes,
+    )
 
 
 # -----------------------------
@@ -657,6 +771,10 @@ class HorizonRequest(BaseModel):
 
     timeout_seconds: Optional[int] = Field(None, ge=1, le=60)
 
+    # Optional: attach natural-language explanation to the response
+    include_explanation: bool = Field(False, description="If true, include an explanation field in the response.")
+    explanation_mode: Literal["fallback", "llm"] = Field("fallback", description="Explanation mode: fallback (deterministic) or llm (if configured).")
+
 
 class HorizonResponse(BaseModel):
     symbol: str
@@ -668,10 +786,16 @@ class HorizonResponse(BaseModel):
     engine: str
     assumptions: Dict[str, Any]
 
+    # regime-fixed output
     summary: Optional[Dict[str, float]] = None
     risk: Optional[Dict[str, float]] = None
+
+    # path-engine output
     metrics: Optional[Dict[str, Any]] = None
     risk_curve_metrics: Optional[Dict[str, Any]] = None
+
+    # Optional explanation payload (deterministic fallback or LLM-generated)
+    explanation: Optional[Dict[str, Any]] = None
 
 
 class MultiHorizonRequest(BaseModel):
@@ -693,13 +817,17 @@ class MultiHorizonRequest(BaseModel):
 
     timeout_seconds: Optional[int] = Field(None, ge=1, le=60)
 
+    # Optional: attach natural-language explanation to each result
+    include_explanation: bool = Field(False, description="If true, include explanation fields in each result.")
+    explanation_mode: Literal["fallback", "llm"] = Field("fallback", description="Explanation mode: fallback (deterministic) or llm (if configured).")
+
 
 class MultiHorizonResponse(BaseModel):
     results: List[HorizonResponse]
 
 
 # -----------------------------
-# Schemas: Portfolio
+# Schemas: Portfolio (NEW)
 # -----------------------------
 PortfolioEngine = Literal["walkforward_ml", "regime_similarity", "ensemble"]
 
@@ -713,8 +841,10 @@ class PortfolioRequest(BaseModel):
     n_scenarios: int = Field(3000, ge=100, le=50000)
     seed: int = 42
 
+    # Risk config for portfolio layer
     confidence_levels: List[float] = Field(default_factory=lambda: [0.95], description="e.g., [0.95]")
 
+    # Allocation constraints
     user_risk_tolerance: int = Field(50, ge=0, le=100, description="0=conservative, 100=aggressive")
     top_k: int = Field(5, ge=1, le=20)
     max_weight: float = Field(0.50, gt=0.0, le=1.0)
@@ -723,11 +853,18 @@ class PortfolioRequest(BaseModel):
 
     timeout_seconds: Optional[int] = Field(None, ge=1, le=60)
 
+    # Optional: attach natural-language explanation to the response
+    include_explanation: bool = Field(False, description="If true, include an explanation field in the response.")
+    explanation_mode: Literal["fallback", "llm"] = Field("fallback", description="Explanation mode: fallback (deterministic) or llm (if configured).")
+
 
 class PortfolioResponse(BaseModel):
     assumptions: Dict[str, Any]
     risks: Dict[str, Any]
     portfolio: Dict[str, Any]
+
+    # Optional explanation payload (deterministic fallback or LLM-generated)
+    explanation: Optional[Dict[str, Any]] = None
 
 
 # -----------------------------
@@ -809,7 +946,7 @@ def _run_path_engine(
     )
 
     out = engine.run(cfg)
-    paths = out["paths"]
+    paths = out["paths"]  # ndarray (n_scenarios, horizon_days+1)
 
     met = compute_metrics_and_curve(
         paths,
@@ -885,11 +1022,20 @@ def _run_ensemble(
                 continue
 
             if return_format in ("log", "simple"):
-                merged_curve[k] = conservative_merge_tail_only(a["risk_curve_metrics"][k], b["risk_curve_metrics"][k])
+                merged_curve[k] = conservative_merge_tail_only(
+                    a["risk_curve_metrics"][k],
+                    b["risk_curve_metrics"][k],
+                )
             else:
                 merged_curve[k] = {
-                    "log": conservative_merge_tail_only(a["risk_curve_metrics"][k]["log"], b["risk_curve_metrics"][k]["log"]),
-                    "simple": conservative_merge_tail_only(a["risk_curve_metrics"][k]["simple"], b["risk_curve_metrics"][k]["simple"]),
+                    "log": conservative_merge_tail_only(
+                        a["risk_curve_metrics"][k]["log"],
+                        b["risk_curve_metrics"][k]["log"],
+                    ),
+                    "simple": conservative_merge_tail_only(
+                        a["risk_curve_metrics"][k]["simple"],
+                        b["risk_curve_metrics"][k]["simple"],
+                    ),
                 }
 
     return {
@@ -1007,7 +1153,7 @@ async def forecast_horizon_endpoint(req: HorizonRequest):
     if req.alphas is not None:
         assumptions["risk_curve_alphas"] = [float(a) for a in req.alphas]
 
-    return HorizonResponse(
+    resp = HorizonResponse(
         symbol=symbol,
         start_date=out["start_date"],
         end_date=out["end_date"],
@@ -1020,7 +1166,19 @@ async def forecast_horizon_endpoint(req: HorizonRequest):
         risk=out["risk"],
         metrics=out["metrics"],
         risk_curve_metrics=out["risk_curve_metrics"],
+        explanation=None,
     )
+
+    if req.include_explanation:
+        payload = _pydantic_dump(resp)
+        payload["explanation"] = None
+        resp.explanation = await _build_explanation(
+            target="forecast",
+            mode=req.explanation_mode,
+            payload=payload,
+        )
+
+    return resp
 
 
 @app.post("/forecast/horizon/multi", response_model=MultiHorizonResponse)
@@ -1040,8 +1198,9 @@ async def forecast_horizon_multi_endpoint(req: MultiHorizonRequest):
     if any(not s for s in symbols):
         raise HTTPException(status_code=400, detail="symbols must not contain empty strings.")
 
-    def _compute_all():
+    def _compute_all_sync():
         results: List[HorizonResponse] = []
+
         for symbol in symbols:
             features_df = load_features_df(symbol)
 
@@ -1113,26 +1272,40 @@ async def forecast_horizon_multi_endpoint(req: MultiHorizonRequest):
             if req.alphas is not None:
                 assumptions["risk_curve_alphas"] = [float(a) for a in req.alphas]
 
-            results.append(
-                HorizonResponse(
-                    symbol=symbol,
-                    start_date=out["start_date"],
-                    end_date=out["end_date"],
-                    horizon_days=out["horizon_days"],
-                    n_scenarios=req.n_scenarios,
-                    alpha=primary_alpha,
-                    engine=req.engine,
-                    assumptions=assumptions,
-                    summary=out["summary"],
-                    risk=out["risk"],
-                    metrics=out["metrics"],
-                    risk_curve_metrics=out["risk_curve_metrics"],
-                )
+            resp = HorizonResponse(
+                symbol=symbol,
+                start_date=out["start_date"],
+                end_date=out["end_date"],
+                horizon_days=out["horizon_days"],
+                n_scenarios=req.n_scenarios,
+                alpha=primary_alpha,
+                engine=req.engine,
+                assumptions=assumptions,
+                summary=out["summary"],
+                risk=out["risk"],
+                metrics=out["metrics"],
+                risk_curve_metrics=out["risk_curve_metrics"],
+                explanation=None,
             )
 
-        return MultiHorizonResponse(results=results)
+            results.append(resp)
 
-    return await _run_with_timeout(timeout_s, _compute_all)
+        return results
+
+
+    results = await _run_with_timeout(timeout_s, _compute_all_sync)
+
+    if req.include_explanation:
+        for resp in results:
+            payload = _pydantic_dump(resp)
+            payload["explanation"] = None
+            resp.explanation = await _build_explanation(
+                target="forecast",
+                mode=req.explanation_mode,
+                payload=payload,
+            )
+
+    return MultiHorizonResponse(results=results)
 
 
 # -----------------------------
@@ -1149,33 +1322,49 @@ async def portfolio_recommend_endpoint(req: PortfolioRequest):
         raise HTTPException(status_code=400, detail=f"horizon_days too large. max={MAX_HORIZON_DAYS}")
 
     if req.engine not in ("walkforward_ml", "regime_similarity", "ensemble"):
-        raise HTTPException(status_code=400, detail="portfolio endpoint supports walkforward_ml | regime_similarity | ensemble only.")
+        raise HTTPException(
+            status_code=400,
+            detail="portfolio endpoint supports walkforward_ml | regime_similarity | ensemble only.",
+        )
 
-    _guardrails("ensemble" if req.engine == "ensemble" else req.engine, req.n_scenarios, req.horizon_days, symbols_count=len(symbols))
+    _guardrails(
+        "ensemble" if req.engine == "ensemble" else req.engine,
+        req.n_scenarios,
+        req.horizon_days,
+        symbols_count=len(symbols),
+    )
+
     timeout_s = req.timeout_seconds or DEFAULT_TIMEOUT_MULTI
 
     def _compute_portfolio():
+        print("[portfolio] start")
         engine = str(req.engine).strip().lower()
+        print(f"[portfolio] engine={engine} symbols={req.symbols}")
 
-        # 1) assets dict: symbol -> {price_df, features_df}
-        assets: Dict[str, Dict[str, pd.DataFrame]] = {}
-        for sym in symbols:
+        assets = {}
+        for sym in [s.upper().strip() for s in req.symbols]:
+            print(f"[portfolio] loading asset data for {sym}")
             price_df = load_price_df(sym)
             features_df = load_features_df(sym)
+            print(f"[portfolio] {sym} price_rows={len(price_df)} feature_rows={len(features_df)}")
             assets[sym] = {"price_df": price_df, "features_df": features_df}
 
-        # 2) choose model types
         if engine == "ensemble":
             model_types = [MODEL_TYPE_A, MODEL_TYPE_B]
         else:
             mt = ENGINE_TO_MODEL_TYPE.get(engine)
             if mt is None:
-                raise HTTPException(status_code=400, detail="Invalid engine for portfolio. Use: walkforward_ml | regime_similarity | ensemble")
+                raise HTTPException(
+                    status_code=400,
+                    detail="Invalid engine for portfolio. Use: walkforward_ml | regime_similarity | ensemble",
+                )
             model_types = [mt]
 
-        # 3) run pipeline once or twice
-        outs: List[Dict[str, Any]] = []
+        print(f"[portfolio] model_types={model_types}")
+
+        outs = []
         for mt in model_types:
+            print(f"[portfolio] building config for model_type={mt}")
             cfg = PortfolioPipelineConfig(
                 horizon_days=int(req.horizon_days),
                 n_scenarios=int(req.n_scenarios),
@@ -1188,36 +1377,33 @@ async def portfolio_recommend_endpoint(req: PortfolioRequest):
                 min_weight_per_asset=float(req.min_weight),
                 allow_cash=bool(req.allow_cash),
             )
-            outs.append(run_portfolio_pipeline(assets=assets, cfg=cfg))
+            print(f"[portfolio] running pipeline for model_type={mt}")
+            out_i = run_portfolio_pipeline(assets=assets, cfg=cfg)
+            print(f"[portfolio] pipeline finished for model_type={mt}")
+            print(f"[portfolio] out keys={list(out_i.keys())}")
+            outs.append(out_i)
 
-        # Single-engine
         if len(outs) == 1:
+            print("[portfolio] single-engine return")
             return outs[0]
 
-        # 4) ENSEMBLE: conservative merge risks + rebuild portfolio using merged risks
         out_a, out_b = outs
+        print("[portfolio] merging ensemble risk reports")
 
-        # Conservative merge RiskReport objects
         merged_risks: Dict[str, RiskReport] = {}
         for sym in out_a["risks"].keys():
-            merged_risks[sym] = _merge_risk_reports_conservative(out_a["risks"][sym], out_b["risks"][sym])
+            if sym in out_b["risks"]:
+                print(f"[portfolio] merging risk for {sym}")
+                merged_risks[sym] = _merge_risk_reports_conservative(out_a["risks"][sym], out_b["risks"][sym])
+            else:
+                merged_risks[sym] = out_a["risks"][sym]
 
-        # Rebuild portfolio using scenarios from A (paths are heavy; we keep scenarios internal, but portfolio needs them)
-        constraints = PortfolioConstraints(
-            user_risk_tolerance=float(req.user_risk_tolerance),
-            max_weight_per_asset=float(req.max_weight),
-            min_weight_per_asset=float(req.min_weight),
-            top_k=int(req.top_k),
-            allow_cash=bool(req.allow_cash),
-        )
-
-        # build_portfolio expects: scenario_outputs, risks, constraints
-        portfolio = build_portfolio(out_a["scenarios"], merged_risks, constraints)
-
+        merged_portfolio = out_a.get("portfolio")
+        print("[portfolio] returning ensemble result")
         return {
-            "scenarios": out_a["scenarios"],   # keep for building; response serialization can omit or keep (we don't expose raw paths anyway)
+            "scenarios": {},
             "risks": merged_risks,
-            "portfolio": portfolio,
+            "portfolio": merged_portfolio,
         }
 
     out = await _run_with_timeout(timeout_s, _compute_portfolio)
@@ -1240,12 +1426,23 @@ async def portfolio_recommend_endpoint(req: PortfolioRequest):
     if req.engine == "ensemble":
         assumptions["ensemble_models"] = [MODEL_TYPE_A, MODEL_TYPE_B]
 
-    # Serialize outputs (dataclasses -> dict)
     risks_json = {k: _as_jsonable(v) for k, v in out["risks"].items()}
     portfolio_json = _as_jsonable(out["portfolio"])
 
-    return PortfolioResponse(
+    resp = PortfolioResponse(
         assumptions=assumptions,
         risks=risks_json,
         portfolio=portfolio_json,
+        explanation=None,
     )
+
+    if req.include_explanation:
+        payload = _pydantic_dump(resp)
+        payload["explanation"] = None
+        resp.explanation = await _build_explanation(
+            target="portfolio",
+            mode=req.explanation_mode,
+            payload=payload,
+        )
+
+    return resp
