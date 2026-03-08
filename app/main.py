@@ -13,7 +13,8 @@ import numpy as np
 import pandas as pd
 import anyio
 from fastapi import FastAPI, HTTPException, Request, Response
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 # Fast (regime-fixed) horizon sampling
@@ -36,6 +37,13 @@ from core.explain.fallback import explain_forecast_fallback, explain_portfolio_f
 
 from fastapi.middleware.cors import CORSMiddleware
 
+# -----------------------------
+# Frontend (React/Vite build)
+# -----------------------------
+ROOT_DIR = Path(__file__).resolve().parent.parent
+FRONTEND_DIST_DIR = ROOT_DIR / "crypto-risk-dashboard" / "dist"
+FRONTEND_ASSETS_DIR = FRONTEND_DIST_DIR / "assets"
+
 
 app = FastAPI(
     title="Agentic Probabilistic Crypto Return Service",
@@ -53,6 +61,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+if FRONTEND_ASSETS_DIR.exists():
+    app.mount("/assets", StaticFiles(directory=FRONTEND_ASSETS_DIR), name="assets")
+
 
 # -----------------------------
 # Error handling
@@ -1446,3 +1458,37 @@ async def portfolio_recommend_endpoint(req: PortfolioRequest):
         )
 
     return resp
+
+
+# -----------------------------
+# Frontend routes
+# -----------------------------
+@app.get("/")
+def serve_frontend_root():
+    if FRONTEND_DIST_DIR.exists():
+        return FileResponse(FRONTEND_DIST_DIR / "index.html")
+    return JSONResponse(
+        status_code=404,
+        content={"detail": "Frontend build not found. Run `npm run build` in crypto-risk-dashboard."},
+    )
+
+
+@app.get("/{full_path:path}")
+def serve_frontend_spa(full_path: str):
+    # Do not intercept API/docs/openapi routes
+    if full_path.startswith("forecast") or full_path.startswith("portfolio"):
+        return JSONResponse(status_code=404, content={"detail": "Not Found"})
+    if full_path in {"docs", "openapi.json", "redoc", "health"}:
+        return JSONResponse(status_code=404, content={"detail": "Not Found"})
+
+    target = FRONTEND_DIST_DIR / full_path
+    if target.exists() and target.is_file():
+        return FileResponse(target)
+
+    if FRONTEND_DIST_DIR.exists():
+        return FileResponse(FRONTEND_DIST_DIR / "index.html")
+
+    return JSONResponse(
+        status_code=404,
+        content={"detail": "Frontend build not found. Run `npm run build` in crypto-risk-dashboard."},
+    )

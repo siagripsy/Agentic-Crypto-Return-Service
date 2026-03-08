@@ -1,0 +1,80 @@
+steps:
+  - name: "gcr.io/cloud-builders/docker"
+    args:
+      [
+        "build",
+        "-t",
+        "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_IMAGE_NAME}:$COMMIT_SHA",
+        "-t",
+        "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_IMAGE_NAME}:latest",
+        "."
+      ]
+
+  - name: "gcr.io/cloud-builders/docker"
+    args:
+      [
+        "push",
+        "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_IMAGE_NAME}:$COMMIT_SHA"
+      ]
+
+  - name: "gcr.io/cloud-builders/docker"
+    args:
+      [
+        "push",
+        "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_IMAGE_NAME}:latest"
+      ]
+
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    entrypoint: "bash"
+    args:
+      - "-c"
+      - |
+        mkdir -p /workspace/build-artifacts
+        echo "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_IMAGE_NAME}:$COMMIT_SHA" > /workspace/build-artifacts/image-uri.txt
+        echo "$COMMIT_SHA" > /workspace/build-artifacts/commit-sha.txt
+
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    entrypoint: "gsutil"
+    args:
+      [
+        "-m",
+        "cp",
+        "-r",
+        "/workspace/build-artifacts/*",
+        "gs://${_ARTIFACT_BUCKET}/builds/$COMMIT_SHA/"
+      ]
+
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    entrypoint: "gcloud"
+    args:
+      [
+        "run",
+        "deploy",
+        "${_SERVICE_NAME}",
+        "--image",
+        "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_IMAGE_NAME}:$COMMIT_SHA",
+        "--region",
+        "${_REGION}",
+        "--platform",
+        "managed",
+        "--allow-unauthenticated",
+        "--memory",
+        "1Gi",
+        "--cpu",
+        "1",
+        "--timeout",
+        "300",
+        "--set-env-vars",
+        "EXPLAIN_ENABLED=1,EXPLAIN_PROVIDER=gemini,EXPLAIN_TIMEOUT_S=15,GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GOOGLE_CLOUD_LOCATION=${_REGION},GEMINI_MODEL=gemini-2.5-flash"
+      ]
+
+images:
+  - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_IMAGE_NAME}:$COMMIT_SHA"
+  - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_IMAGE_NAME}:latest"
+
+substitutions:
+  _REGION: "us-central1"
+  _AR_REPO: "crypto-risk-repo"
+  _IMAGE_NAME: "crypto-risk-service"
+  _SERVICE_NAME: "crypto-risk-service"
+  _ARTIFACT_BUCKET: "model-folio-451800-p5-artifacts"
