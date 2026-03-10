@@ -31,6 +31,9 @@ from core.models.scenario_metrics import compute_scenario_metrics, MetricsConfig
 from core.pipelines.portfolio_pipeline import run_portfolio_pipeline, PortfolioPipelineConfig
 from core.risk.schemas import RiskConfig, RiskReport
 
+# Call All Core Services (regime matching, scenario engine, risk, portfolio) in one workflow
+from core.services.user_portfolio_workflow import run_Crypto_Return_Service
+
 # Explanation engine (LLM-first + deterministic fallback)
 from core.explain.explanation_agent import load_explanation_engine_from_env
 from core.explain.fallback import explain_forecast_fallback, explain_portfolio_fallback
@@ -1060,6 +1063,29 @@ def _run_ensemble(
         "risk_curve_metrics": merged_curve,
     }
 
+def serialize_crypto_return_service_result(result: dict) -> dict:
+    risks = {k: vars(v) for k, v in result["risks"].items()}
+
+    portfolio_obj = result["portfolio"]
+    portfolio_dict = vars(portfolio_obj).copy()
+    portfolio_dict["details"] = [vars(item) for item in portfolio_obj.details]
+
+    scenario_engine_serialized = {}
+
+    for asset, se in result["scenario_engine"].items():
+        se_dict = dict(se)
+
+        if "paths" in se_dict and hasattr(se_dict["paths"], "tolist"):
+            se_dict["paths"] = se_dict["paths"].tolist()
+
+        scenario_engine_serialized[asset] = se_dict
+
+    return {
+        "regime_matching": result["regime_matching"],
+        "scenario_engine": scenario_engine_serialized,
+        "risks": risks,
+        "portfolio": portfolio_dict,
+    }
 
 # -----------------------------
 # Endpoints
@@ -1068,6 +1094,16 @@ def _run_ensemble(
 def health():
     return {"status": "ok"}
 
+from app.schemas.crypto_return_service import CryptoReturnServiceRequest
+
+@app.post("/crypto_return_service")
+def crypto_return_service(request: CryptoReturnServiceRequest):
+
+    user_input = request.dict()
+    result = run_Crypto_Return_Service(user_input)
+    return serialize_crypto_return_service_result(result)
+    
+#-----------------------------------------------------------    
 
 @app.post("/forecast/horizon", response_model=HorizonResponse)
 async def forecast_horizon_endpoint(req: HorizonRequest):
