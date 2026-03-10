@@ -1,0 +1,14 @@
+Capstone_env
+crypto-risk-dashboard/node_modules
+crypto-risk-dashboard/dist
+__pycache__
+**/__pycache__
+*.pyc
+*.pyo
+*.pyd
+.git
+.gitignore
+.vscode
+notebooks
+tests
+docs

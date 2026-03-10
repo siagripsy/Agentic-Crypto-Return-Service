@@ -19,9 +19,9 @@ import { num } from "../utils/format";
 
 function kpi(label: string, value: string) {
   return (
-    <div style={{ border: "1px solid #eee", borderRadius: 12, padding: 10 }}>
-      <div style={{ color: "#666", fontSize: 12 }}>{label}</div>
-      <div style={{ fontWeight: 800, fontSize: 16 }}>{value}</div>
+    <div className="kpi-card">
+      <div className="kpi-label">{label}</div>
+      <div className="kpi-value">{value}</div>
     </div>
   );
 }
@@ -69,18 +69,14 @@ export default function ForecastPage() {
       start_date: startDate,
       end_date: !isPathEngine && forecastMode === "end_date" ? (endDate || null) : null,
       horizon_days: isPathEngine || forecastMode === "horizon_days" ? horizonDays : null,
-
       engine,
       n_scenarios: nScenarios,
-
       alpha,
       risk_level: riskLevel || null,
       alphas: null,
-
       seed: 42,
       return_format: returnFormat,
       timeout_seconds: 30,
-
       include_explanation: includeExplanation,
       explanation_mode: explanationMode
     }),
@@ -107,18 +103,14 @@ export default function ForecastPage() {
       start_date: startDate,
       end_date: !isPathEngine && forecastMode === "end_date" ? (endDate || null) : null,
       horizon_days: isPathEngine || forecastMode === "horizon_days" ? horizonDays : null,
-
       engine,
       n_scenarios: nScenarios,
-
       alpha,
       risk_level: riskLevel || null,
       alphas: null,
-
       seed: 42,
       return_format: returnFormat,
       timeout_seconds: 30,
-
       include_explanation: includeExplanation,
       explanation_mode: explanationMode
     }),
@@ -157,20 +149,19 @@ export default function ForecastPage() {
     returnFormat === "log"
       ? singleData?.metrics?.log ?? null
       : returnFormat === "simple"
-      ? singleData?.metrics?.simple ?? null
-      : singleData?.metrics?.simple ?? singleData?.metrics?.log ?? null;
+        ? singleData?.metrics?.simple ?? null
+        : singleData?.metrics?.simple ?? singleData?.metrics?.log ?? null;
 
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "360px 1fr", gap: 16 }}>
-      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+    <div className="dashboard-grid">
+      <div className="sidebar-stack">
         <Card title="Forecast controls">
-          <div style={{ display: "grid", gap: 10 }}>
-            <label>
+          <div className="form-grid">
+            <label className="form-group">
               Forecast scope
               <select
                 value={forecastScope}
                 onChange={(e) => setForecastScope(e.target.value as "single" | "multi")}
-                style={{ width: "100%", padding: 8, marginTop: 4 }}
               >
                 <option value="single">Single forecast</option>
                 <option value="multi">Multi forecast</option>
@@ -178,42 +169,28 @@ export default function ForecastPage() {
             </label>
 
             {forecastScope === "single" ? (
-              <label>
+              <label className="form-group">
                 Symbol
-                <input
-                  value={symbol}
-                  onChange={(e) => setSymbol(e.target.value)}
-                  style={{ width: "100%", padding: 8, marginTop: 4 }}
-                />
+                <input value={symbol} onChange={(e) => setSymbol(e.target.value)} />
               </label>
             ) : (
-              <label>
+              <label className="form-group">
                 Symbols (comma-separated)
-                <input
-                  value={symbolsCsv}
-                  onChange={(e) => setSymbolsCsv(e.target.value)}
-                  style={{ width: "100%", padding: 8, marginTop: 4 }}
-                />
+                <input value={symbolsCsv} onChange={(e) => setSymbolsCsv(e.target.value)} />
               </label>
             )}
 
-            <label>
+            <label className="form-group">
               Start date
-              <input
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                style={{ width: "100%", padding: 8, marginTop: 4 }}
-              />
+              <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
             </label>
 
-            <label>
+            <label className="form-group">
               Forecast mode
               <select
                 value={forecastMode}
                 disabled={isPathEngine}
                 onChange={(e) => setForecastMode(e.target.value as "end_date" | "horizon_days")}
-                style={{ width: "100%", padding: 8, marginTop: 4 }}
               >
                 <option value="horizon_days">Use horizon days</option>
                 <option value="end_date">Use end date</option>
@@ -221,23 +198,18 @@ export default function ForecastPage() {
             </label>
 
             {isPathEngine ? (
-              <div style={{ fontSize: 12, color: "#666", marginTop: -4 }}>
+              <div className="helper-text">
                 This engine requires horizon days. End date mode is disabled.
               </div>
             ) : null}
 
             {forecastMode === "end_date" && !isPathEngine ? (
-              <label>
+              <label className="form-group">
                 End date
-                <input
-                  type="date"
-                  value={endDate}
-                  onChange={(e) => setEndDate(e.target.value)}
-                  style={{ width: "100%", padding: 8, marginTop: 4 }}
-                />
+                <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
               </label>
             ) : (
-              <label>
+              <label className="form-group">
                 Horizon days
                 <input
                   type="number"
@@ -245,18 +217,13 @@ export default function ForecastPage() {
                   min={1}
                   max={252}
                   onChange={(e) => setHorizonDays(Number(e.target.value))}
-                  style={{ width: "100%", padding: 8, marginTop: 4 }}
                 />
               </label>
             )}
 
-            <label>
+            <label className="form-group">
               Engine
-              <select
-                value={engine}
-                onChange={(e) => setEngine(e.target.value as EngineType)}
-                style={{ width: "100%", padding: 8, marginTop: 4 }}
-              >
+              <select value={engine} onChange={(e) => setEngine(e.target.value as EngineType)}>
                 <option value="fast_regime_fixed">fast_regime_fixed</option>
                 <option value="walkforward_ml">walkforward_ml</option>
                 <option value="regime_similarity">regime_similarity</option>
@@ -264,7 +231,7 @@ export default function ForecastPage() {
               </select>
             </label>
 
-            <label>
+            <label className="form-group">
               # scenarios
               <input
                 type="number"
@@ -272,11 +239,10 @@ export default function ForecastPage() {
                 min={100}
                 max={20000}
                 onChange={(e) => setNScenarios(Number(e.target.value))}
-                style={{ width: "100%", padding: 8, marginTop: 4 }}
               />
             </label>
 
-            <label>
+            <label className="form-group">
               Alpha (tail probability)
               <input
                 type="number"
@@ -285,17 +251,12 @@ export default function ForecastPage() {
                 min={0.001}
                 max={0.49}
                 onChange={(e) => setAlpha(Number(e.target.value))}
-                style={{ width: "100%", padding: 8, marginTop: 4 }}
               />
             </label>
 
-            <label>
+            <label className="form-group">
               Risk level (optional)
-              <select
-                value={riskLevel}
-                onChange={(e) => setRiskLevel(e.target.value as any)}
-                style={{ width: "100%", padding: 8, marginTop: 4 }}
-              >
+              <select value={riskLevel} onChange={(e) => setRiskLevel(e.target.value as RiskLevel | "")}>
                 <option value="">(none)</option>
                 <option value="low">low</option>
                 <option value="medium">medium</option>
@@ -303,12 +264,11 @@ export default function ForecastPage() {
               </select>
             </label>
 
-            <label>
+            <label className="form-group">
               Return format
               <select
                 value={returnFormat}
                 onChange={(e) => setReturnFormat(e.target.value as ReturnFormat)}
-                style={{ width: "100%", padding: 8, marginTop: 4 }}
               >
                 <option value="both">both</option>
                 <option value="log">log</option>
@@ -316,21 +276,24 @@ export default function ForecastPage() {
               </select>
             </label>
 
-            <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <label
+              className="form-group"
+              style={{ gridTemplateColumns: "18px 1fr", alignItems: "center", gap: 8 }}
+            >
               <input
                 type="checkbox"
                 checked={includeExplanation}
                 onChange={(e) => setIncludeExplanation(e.target.checked)}
+                style={{ width: 16, minHeight: 16, height: 16, margin: 0 }}
               />
-              Include explanation
+              <span>Include explanation</span>
             </label>
 
-            <label>
+            <label className="form-group">
               Explanation mode
               <select
                 value={explanationMode}
-                onChange={(e) => setExplanationMode(e.target.value as any)}
-                style={{ width: "100%", padding: 8, marginTop: 4 }}
+                onChange={(e) => setExplanationMode(e.target.value as "fallback" | "llm")}
               >
                 <option value="fallback">fallback</option>
                 <option value="llm">llm</option>
@@ -338,21 +301,13 @@ export default function ForecastPage() {
             </label>
 
             <button
+              className="primary-btn"
               onClick={() => {
                 if (forecastScope === "single") {
                   singleMut.mutate(singleReq);
                 } else {
                   multiMut.mutate(multiReq);
                 }
-              }}
-              style={{
-                padding: "10px 12px",
-                borderRadius: 12,
-                border: "1px solid #111",
-                background: "#111",
-                color: "white",
-                fontWeight: 800,
-                cursor: "pointer"
               }}
             >
               {forecastScope === "single" ? "Run forecast" : "Run multi forecast"}
@@ -361,11 +316,13 @@ export default function ForecastPage() {
         </Card>
 
         <Card title="Request JSON (debug)">
-          <JsonPanel data={forecastScope === "single" ? singleReq : multiReq} />
+          <div className="json-panel">
+            <JsonPanel data={forecastScope === "single" ? singleReq : multiReq} />
+          </div>
         </Card>
       </div>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      <div className="content-stack">
         {activeLoading ? (
           <Loading label={forecastScope === "single" ? "Running forecast…" : "Running multi forecast…"} />
         ) : null}
@@ -376,24 +333,24 @@ export default function ForecastPage() {
           singleData ? (
             <>
               <Card title="At-a-glance">
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10 }}>
+                <div className="kpi-grid">
                   {kpi("Engine", String(singleData.engine))}
                   {kpi("Horizon", `${singleData.horizon_days} days`)}
                   {kpi("# scenarios", String(singleData.n_scenarios))}
                   {kpi("Alpha", String(singleData.alpha))}
                 </div>
 
-                <div style={{ height: 10 }} />
+                <div style={{ height: 12 }} />
 
                 {singleData.summary ? (
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10 }}>
+                  <div className="kpi-grid">
                     {kpi("Mean (terminal)", num(singleData.summary.mean ?? NaN))}
                     {kpi("Median (terminal)", num(singleData.summary.median ?? NaN))}
                     {kpi("p05 (terminal)", num(singleData.summary.p05 ?? NaN))}
                     {kpi("p95 (terminal)", num(singleData.summary.p95 ?? NaN))}
                   </div>
                 ) : (
-                  <div style={{ color: "#666" }}>
+                  <div className="helper-text">
                     Using metric-based charts from the returned summary statistics below.
                   </div>
                 )}
@@ -405,27 +362,35 @@ export default function ForecastPage() {
               />
 
               {returnFormat === "both" ? (
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
                   <Card title="Log metrics JSON">
-                    <JsonPanel data={singleData.metrics?.log ?? null} />
+                    <div className="json-panel">
+                      <JsonPanel data={singleData.metrics?.log ?? null} />
+                    </div>
                   </Card>
                   <Card title="Simple metrics JSON">
-                    <JsonPanel data={singleData.metrics?.simple ?? null} />
+                    <div className="json-panel">
+                      <JsonPanel data={singleData.metrics?.simple ?? null} />
+                    </div>
                   </Card>
                 </div>
               ) : (
                 <Card title="Metrics JSON">
-                  <JsonPanel data={singleData.metrics} />
+                  <div className="json-panel">
+                    <JsonPanel data={singleData.metrics} />
+                  </div>
                 </Card>
               )}
 
               <Card title="Explanation">
-                <JsonPanel data={singleData.explanation} />
+                <div className="json-panel">
+                  <JsonPanel data={singleData.explanation} />
+                </div>
               </Card>
             </>
           ) : (
             <Card title="What you’ll see here">
-              <div style={{ color: "#444", lineHeight: 1.4 }}>
+              <div style={{ color: "#444", lineHeight: 1.5 }}>
                 Run a single-asset forecast to see summary charts, raw metrics, and explanation output.
               </div>
             </Card>
@@ -433,7 +398,7 @@ export default function ForecastPage() {
         ) : multiData ? (
           <>
             <Card title="Multi forecast overview">
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10 }}>
+              <div className="kpi-grid">
                 {kpi("Assets", String(multiData.results.length))}
                 {kpi("Engine", String(multiData.results[0]?.engine ?? "—"))}
                 {kpi("Horizon", `${multiData.results[0]?.horizon_days ?? "—"} days`)}
@@ -446,30 +411,30 @@ export default function ForecastPage() {
                 returnFormat === "log"
                   ? item.metrics?.log ?? null
                   : returnFormat === "simple"
-                  ? item.metrics?.simple ?? null
-                  : item.metrics?.simple ?? item.metrics?.log ?? null;
+                    ? item.metrics?.simple ?? null
+                    : item.metrics?.simple ?? item.metrics?.log ?? null;
 
               return (
-                <div key={item.symbol} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                <div key={item.symbol} className="content-stack">
                   <Card title={`${item.symbol} — at a glance`}>
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10 }}>
+                    <div className="kpi-grid">
                       {kpi("Engine", String(item.engine))}
                       {kpi("Horizon", `${item.horizon_days} days`)}
                       {kpi("# scenarios", String(item.n_scenarios))}
                       {kpi("Alpha", String(item.alpha))}
                     </div>
 
-                    <div style={{ height: 10 }} />
+                    <div style={{ height: 12 }} />
 
                     {item.summary ? (
-                      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10 }}>
+                      <div className="kpi-grid">
                         {kpi("Mean (terminal)", num(item.summary.mean ?? NaN))}
                         {kpi("Median (terminal)", num(item.summary.median ?? NaN))}
                         {kpi("p05 (terminal)", num(item.summary.p05 ?? NaN))}
                         {kpi("p95 (terminal)", num(item.summary.p95 ?? NaN))}
                       </div>
                     ) : (
-                      <div style={{ color: "#666" }}>
+                      <div className="helper-text">
                         Using metric-based charts from returned summary statistics.
                       </div>
                     )}
@@ -481,22 +446,30 @@ export default function ForecastPage() {
                   />
 
                   {returnFormat === "both" ? (
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
                       <Card title={`${item.symbol} — log metrics JSON`}>
-                        <JsonPanel data={item.metrics?.log ?? null} />
+                        <div className="json-panel">
+                          <JsonPanel data={item.metrics?.log ?? null} />
+                        </div>
                       </Card>
                       <Card title={`${item.symbol} — simple metrics JSON`}>
-                        <JsonPanel data={item.metrics?.simple ?? null} />
+                        <div className="json-panel">
+                          <JsonPanel data={item.metrics?.simple ?? null} />
+                        </div>
                       </Card>
                     </div>
                   ) : (
                     <Card title={`${item.symbol} — metrics JSON`}>
-                      <JsonPanel data={item.metrics} />
+                      <div className="json-panel">
+                        <JsonPanel data={item.metrics} />
+                      </div>
                     </Card>
                   )}
 
                   <Card title={`${item.symbol} — explanation`}>
-                    <JsonPanel data={item.explanation} />
+                    <div className="json-panel">
+                      <JsonPanel data={item.explanation} />
+                    </div>
                   </Card>
                 </div>
               );
@@ -504,8 +477,9 @@ export default function ForecastPage() {
           </>
         ) : (
           <Card title="What you’ll see here">
-            <div style={{ color: "#444", lineHeight: 1.4 }}>
-              Run a multi-asset forecast to see one result block per symbol, including charts, raw metrics, and explanation.
+            <div style={{ color: "#444", lineHeight: 1.5 }}>
+              Run a multi-asset forecast to see one result block per symbol, including charts, raw
+              metrics, and explanation.
             </div>
           </Card>
         )}
