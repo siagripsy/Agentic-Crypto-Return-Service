@@ -3,9 +3,8 @@ FROM node:20-bookworm-slim AS frontend-builder
 
 WORKDIR /app/crypto-risk-dashboard
 
-COPY crypto-risk-dashboard/package.json ./
-COPY crypto-risk-dashboard/package-lock.json ./
-
+COPY crypto-risk-dashboard/package*.json ./
+RUN rm -rf node_modules package-lock.json
 RUN npm install
 
 COPY crypto-risk-dashboard/ ./
