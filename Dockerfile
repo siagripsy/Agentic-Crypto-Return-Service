@@ -6,7 +6,7 @@ WORKDIR /app/crypto-risk-dashboard
 COPY crypto-risk-dashboard/package.json ./
 COPY crypto-risk-dashboard/package-lock.json ./
 
-RUN npm ci
+RUN npm install
 
 COPY crypto-risk-dashboard/ ./
 RUN npm run build
