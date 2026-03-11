@@ -1,6 +1,3 @@
-This is a test text for branches.
-
-
 
 # Agentic Probabilistic Crypto Return Analysis Service
 
