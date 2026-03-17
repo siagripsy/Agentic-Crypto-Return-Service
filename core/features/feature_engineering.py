@@ -2,6 +2,16 @@ from __future__ import annotations
 import pandas as pd
 import numpy as np
 
+DECIMAL_28_12_MAX = 9999999999999999.999999999999
+DECIMAL_28_12_MIN = -DECIMAL_28_12_MAX
+VOLATILITY_EPSILON = 1e-6
+RISK_ADJ_RET_CLIP = 1_000_000.0
+VOL_RATIO_CLIP = 1_000_000.0
+
+
+def _clip_to_decimal_28_12(series: pd.Series) -> pd.Series:
+    return series.clip(lower=DECIMAL_28_12_MIN, upper=DECIMAL_28_12_MAX)
+
 
 def add_log_return_1d(df: pd.DataFrame, price_col: str = "close") -> pd.DataFrame:
     """
@@ -79,7 +89,9 @@ def add_risk_adjusted_return(df: pd.DataFrame,
     - makes moves comparable across calm vs chaotic periods.
     """
     out = df.copy()
-    out["risk_adj_ret_1d"] = out[ret_col] / out[vol_col]
+    denom = pd.to_numeric(out[vol_col], errors="coerce").abs().clip(lower=VOLATILITY_EPSILON)
+    values = pd.to_numeric(out[ret_col], errors="coerce") / denom
+    out["risk_adj_ret_1d"] = _clip_to_decimal_28_12(values.clip(lower=-RISK_ADJ_RET_CLIP, upper=RISK_ADJ_RET_CLIP))
     return out
 
 
@@ -94,7 +106,10 @@ def add_vol_ratio(df: pd.DataFrame,
     - < 1 means market is calming down.
     """
     out = df.copy()
-    out["vol_ratio_7d_30d"] = out[short_vol_col] / out[long_vol_col]
+    denom = pd.to_numeric(out[long_vol_col], errors="coerce").abs().clip(lower=VOLATILITY_EPSILON)
+    numer = pd.to_numeric(out[short_vol_col], errors="coerce").abs()
+    values = numer / denom
+    out["vol_ratio_7d_30d"] = _clip_to_decimal_28_12(values.clip(lower=0.0, upper=VOL_RATIO_CLIP))
     return out
 
 
@@ -163,6 +178,14 @@ def build_features_basic(df: pd.DataFrame) -> pd.DataFrame:
         "vol_7d", "vol_30d",
         "risk_adj_ret_1d", "vol_ratio_7d_30d", "drawdown_30d"
     ]
+    numeric_cols = [
+        "open", "high", "low", "close", "volume", "market_cap",
+        "log_ret_1d", "log_ret_5d", "log_ret_10d",
+        "vol_7d", "vol_30d", "risk_adj_ret_1d", "vol_ratio_7d_30d", "drawdown_30d",
+    ]
+    for col in numeric_cols:
+        if col in out.columns:
+            out[col] = _clip_to_decimal_28_12(pd.to_numeric(out[col], errors="coerce"))
     out = drop_na_features(out, required)
 
     return out

@@ -1,28 +1,28 @@
 from __future__ import annotations
 
 import os
-import glob
 import argparse
 import joblib
-import pandas as pd
 
 from core.models.probabilistic_quantile import (
+    load_features_csv,
     add_next_day_target,
     prepare_model_frame,
     time_split,
     fit_quantile_models,
 )
+from core.storage.coin_repository import get_coin_repository
+from core.storage.market_data_repository import get_market_data_repository
 
-DEFAULT_FEATURE_DIR = "data/processed/features"
 DEFAULT_OUT_DIR = "artifacts/models"
 
 
-def train_one_coin(csv_path: str, out_dir: str, train_frac: float = 0.8) -> str:
-    df = pd.read_csv(csv_path)
-    df["date"] = pd.to_datetime(df["date"], errors="coerce")
-    df = df.dropna(subset=["date"]).sort_values("date").reset_index(drop=True)
+def train_one_coin(symbol: str, out_dir: str, train_frac: float = 0.8) -> str:
+    repository = get_market_data_repository()
+    df = load_features_csv(repository.read_features(symbol=symbol))
+    if df.empty:
+        raise FileNotFoundError(f"No features found for symbol={symbol}")
 
-    # define next-day target (no leakage)
     df = add_next_day_target(df, ret_col="log_ret_1d")
 
     model_df, feats, target = prepare_model_frame(df)
@@ -34,10 +34,6 @@ def train_one_coin(csv_path: str, out_dir: str, train_frac: float = 0.8) -> str:
     ticker = None
     if "ticker" in df.columns:
         ticker = str(df["ticker"].dropna().iloc[-1])
-    if not ticker:
-        # fallback from filename
-        base = os.path.basename(csv_path)
-        ticker = base.split("_")[0].upper()
 
     coin_dir = os.path.join(out_dir, ticker)
     os.makedirs(coin_dir, exist_ok=True)
@@ -50,7 +46,7 @@ def train_one_coin(csv_path: str, out_dir: str, train_frac: float = 0.8) -> str:
             "feature_cols": feats,
             "train_rows": len(train_df),
             "test_rows": len(test_df),
-            "source_csv": csv_path,
+            "source_symbol": symbol.upper(),
         },
         out_path,
     )
@@ -59,19 +55,18 @@ def train_one_coin(csv_path: str, out_dir: str, train_frac: float = 0.8) -> str:
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--features_dir", default=DEFAULT_FEATURE_DIR)
     ap.add_argument("--out_dir", default=DEFAULT_OUT_DIR)
-    ap.add_argument("--pattern", default="*_features.csv")
+    ap.add_argument("--symbols", nargs="*", default=None)
     ap.add_argument("--train_frac", type=float, default=0.8)
     args = ap.parse_args()
 
-    files = sorted(glob.glob(os.path.join(args.features_dir, args.pattern)))
-    if not files:
-        raise SystemExit(f"No feature files found in {args.features_dir} with pattern {args.pattern}")
+    symbols = args.symbols or get_coin_repository().list_symbols()
+    if not symbols:
+        raise SystemExit("No symbols found in Coins table.")
 
     saved = []
-    for f in files:
-        out_path = train_one_coin(f, args.out_dir, train_frac=args.train_frac)
+    for symbol in symbols:
+        out_path = train_one_coin(symbol, args.out_dir, train_frac=args.train_frac)
         saved.append(out_path)
         print(f"[OK] trained and saved: {out_path}")
 

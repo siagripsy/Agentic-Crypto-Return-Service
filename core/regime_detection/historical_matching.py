@@ -1,6 +1,7 @@
 import os
 import pickle
 from typing import Tuple, List, Optional, Dict
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -24,12 +25,18 @@ FEATURE_COLUMNS = [
 ]
 
 
+DEFAULT_ARTIFACTS_DIR = str(Path(__file__).resolve().parents[2] / "artifacts" / "models")
+
+
 # ----------------------------------------------------------------------
 # Data prep
 # ----------------------------------------------------------------------
 
-def load_feature_data(path: str) -> pd.DataFrame:
-    df = pd.read_csv(path)
+def load_feature_data(data: pd.DataFrame | str) -> pd.DataFrame:
+    if isinstance(data, pd.DataFrame):
+        df = data.copy()
+    else:
+        df = pd.read_csv(data)
     df = df.sort_values("date").reset_index(drop=True)
     return df
 
@@ -160,7 +167,7 @@ def save_regime_artifacts(
     model: torch.nn.Module,
     scaler: StandardScaler,
     train_config: Dict,
-    out_dir: str = "artifacts/models",
+    out_dir: str = DEFAULT_ARTIFACTS_DIR,
 ) -> Tuple[str, str, str]:
     """
     Saves regime artifacts under:
@@ -191,7 +198,7 @@ def load_regime_artifacts(
     ticker: str,
     match_window_days: int,
     latent_dim: int = 16,
-    out_dir: str = "artifacts/models",
+    out_dir: str = DEFAULT_ARTIFACTS_DIR,
 ) -> Optional[Dict]:
     """
     Loads:

@@ -10,6 +10,8 @@ import streamlit as st
 import matplotlib.pyplot as plt
 
 from core.models.horizon_scenarios import forecast_horizon
+from core.storage.coin_repository import get_coin_repository
+from core.storage.market_data_repository import get_market_data_repository
 
 import sys
 import numpy as np
@@ -34,7 +36,6 @@ st.caption(
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 MODELS_DIR = PROJECT_ROOT / "artifacts" / "models"
-FEATURES_DIR = PROJECT_ROOT / "data" / "processed" / "features"
 
 
 # -----------------------------
@@ -47,18 +48,21 @@ def log_to_simple(x: float) -> float:
 
 @st.cache_resource  # Loads and caches the saved quantile model bundle (joblib file) for the selected crypto symbol.
 def load_bundle(symbol: str):
-    path = MODELS_DIR / f"{symbol.upper()}_quantile_bundle.joblib"
+    ticker = get_coin_repository().get_by_symbol(symbol).yahoo_ticker
+    path = MODELS_DIR / ticker / "quantile_model_bundle.joblib"
     if not path.exists():
         raise FileNotFoundError(f"Model bundle not found: {path}")
-    return joblib.load(path)
+    obj = joblib.load(path)
+    if isinstance(obj, dict) and "bundle" in obj:
+        return obj["bundle"]
+    return obj
 
 
 @st.cache_data   # # Loads and caches the processed feature dataset for the symbol, parsing and sorting by date.
 def load_features(symbol: str) -> pd.DataFrame:
-    path = FEATURES_DIR / f"{symbol.upper()}_features.csv"
-    if not path.exists():
-        raise FileNotFoundError(f"Features CSV not found: {path}")
-    df = pd.read_csv(path)
+    df = get_market_data_repository().read_features(symbol=symbol)
+    if df.empty:
+        raise FileNotFoundError(f"Features data not found for symbol={symbol.upper()}")
     df["date"] = pd.to_datetime(df["date"])
     df = df.sort_values("date").reset_index(drop=True)
     return df
@@ -82,7 +86,7 @@ def format_summary(summary_log: dict, mode: str) -> dict:
 # -----------------------------
 st.sidebar.header("Inputs")
 
-symbol = st.sidebar.selectbox("Symbol", ["BTC", "ETH"])
+symbol = st.sidebar.selectbox("Symbol", get_coin_repository().list_symbols())
 
 try:
     features_df = load_features(symbol)
