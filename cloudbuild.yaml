@@ -70,3 +70,6 @@ substitutions:
   _IMAGE_NAME: "apcras-api"
   _SERVICE_NAME: "apcras-api"
   _ARTIFACT_BUCKET: "apcras-bak-apcras"
+
+options:
+  logging: CLOUD_LOGGING_ONLY
