@@ -16,6 +16,7 @@
     "recharts": "^2.12.7"
   },
   "devDependencies": {
+    "rollup": "^4.24.0",
     "@types/react": "^18.3.4",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.1",
