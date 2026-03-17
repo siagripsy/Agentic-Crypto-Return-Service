@@ -4,8 +4,7 @@ FROM node:20-bookworm-slim AS frontend-builder
 WORKDIR /app/crypto-risk-dashboard
 
 COPY crypto-risk-dashboard/package*.json ./
-RUN rm -rf node_modules package-lock.json
-RUN npm install
+RUN npm ci
 
 COPY crypto-risk-dashboard/ ./
 RUN npm run build
@@ -43,7 +42,6 @@ RUN pip install --no-cache-dir --upgrade pip && \
 COPY app ./app
 COPY core ./core
 COPY artifacts ./artifacts
-COPY .env ./.env
 
 COPY --from=frontend-builder /app/crypto-risk-dashboard/dist ./crypto-risk-dashboard/dist
 

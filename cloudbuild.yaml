@@ -59,11 +59,11 @@ steps:
         "managed",
         "--allow-unauthenticated",
         "--memory",
-        "1Gi",
+        "2Gi",
         "--cpu",
         "1",
         "--timeout",
-        "300",
+        "900",
         "--set-env-vars",
         "EXPLAIN_ENABLED=1,EXPLAIN_PROVIDER=gemini,EXPLAIN_TIMEOUT_S=15,GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GOOGLE_CLOUD_LOCATION=${_REGION},GEMINI_MODEL=gemini-2.5-flash"
       ]
