@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Dict, Any, Optional, List, Tuple
 
 import os
+from pathlib import Path
 import joblib
 import numpy as np
 import pandas as pd
@@ -12,9 +13,12 @@ from core.models.scenario_generator_base import BaseScenarioGenerator, ScenarioR
 from core.models.probabilistic_quantile import predict_quantiles, sample_from_quantiles
 
 
+DEFAULT_MODELS_ROOT = str(Path(__file__).resolve().parents[2] / "artifacts" / "models")
+
+
 @dataclass
 class WalkForwardMLConfig:
-    models_root: str = "artifacts/models"
+    models_root: str = DEFAULT_MODELS_ROOT
     warmup_rows: int = 80  # seed rolling features from recent real rows
 
     # sampling strategy for scenario population

@@ -35,11 +35,14 @@ DEFAULT_FEATURES: List[str] = [
 ]
 
 
-def load_features_csv(path: str) -> pd.DataFrame:
+def load_features_csv(path: str | pd.DataFrame) -> pd.DataFrame:
     """
-    Loads a features CSV and returns it sorted by date.
+    Loads feature data and returns it sorted by date.
     """
-    df = pd.read_csv(path)
+    if isinstance(path, pd.DataFrame):
+        df = path.copy()
+    else:
+        df = pd.read_csv(path)
     df["date"] = pd.to_datetime(df["date"])
     df = df.sort_values("date").reset_index(drop=True)
     return df

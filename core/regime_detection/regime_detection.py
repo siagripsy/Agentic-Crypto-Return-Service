@@ -17,7 +17,7 @@ from core.regime_detection.historical_matching import (
 
 
 def run_regime_historical_matching(
-    features_csv_path: str,
+    features_df,
     ticker: str,
     match_window_days: int = 30,
     top_n: int = 10,
@@ -40,7 +40,7 @@ def run_regime_historical_matching(
     - summarize
     """
 
-    df_raw = load_feature_data(features_csv_path)
+    df_raw = load_feature_data(features_df)
 
     artifacts = None if force_retrain else load_regime_artifacts(
         ticker=ticker,

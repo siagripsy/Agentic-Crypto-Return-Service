@@ -1,9 +1,6 @@
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any, Dict
-
-import pandas as pd
 
 from core.regime_detection.regime_detection import run_regime_historical_matching
 from core.pipelines.scenario_engine import ScenarioEngine, ScenarioConfig
@@ -11,9 +8,7 @@ from core.risk.risk import compute_risk
 from core.risk.schemas import RiskConfig
 from core.portfolio.portfolio import build_portfolio
 from core.portfolio.schemas import PortfolioConstraints
-
-
-FEATURES_DIR = Path("data/processed/features")
+from core.storage.market_data_repository import get_market_data_repository
 
 MATCH_WINDOW_DAYS = 30
 TOP_N = 10
@@ -35,16 +30,19 @@ def run_Crypto_Return_Service(user_input: Dict[str, Any]) -> Dict[str, Any]:
     regime_outputs: Dict[str, Any] = {}
     scenario_outputs: Dict[str, Any] = {}
     risks: Dict[str, Any] = {}
+    repository = get_market_data_repository()
 
     for ticker in assets.keys():
-        features_path = FEATURES_DIR / f"{str.replace(ticker,'-USD','')}_features.csv"
-        df = pd.read_csv(features_path)
+        symbol = str.replace(ticker, "-USD", "")
+        df = repository.read_features(symbol=symbol)
+        if df.empty:
+            raise FileNotFoundError(f"Features data not found for ticker={ticker}")
         
         #=======================================
         # Step 1: Regime Matching
         #=======================================
         regime_outputs[ticker] = run_regime_historical_matching(
-            features_csv_path=str(features_path),
+            features_df=df,
             ticker=ticker,
             match_window_days=MATCH_WINDOW_DAYS,
             top_n=TOP_N,

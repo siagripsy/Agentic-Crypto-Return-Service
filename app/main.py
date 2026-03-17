@@ -37,6 +37,8 @@ from core.services.user_portfolio_workflow import run_Crypto_Return_Service
 # Explanation engine (LLM-first + deterministic fallback)
 from core.explain.explanation_agent import load_explanation_engine_from_env
 from core.explain.fallback import explain_forecast_fallback, explain_portfolio_fallback
+from core.storage.coin_repository import get_coin_repository
+from core.storage.market_data_repository import get_market_data_repository
 
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -78,13 +80,7 @@ async def file_not_found_handler(request: Request, exc: FileNotFoundError):
     return JSONResponse(status_code=404, content={"detail": str(exc)})
 
 
-# -----------------------------
-# Paths (relative to repo root)
-# -----------------------------
-MODELS_DIR = Path("artifacts/models")
-FEATURES_DIR = Path("data/processed/features")
-COINS_PATH = Path("data/raw/metadata/coins.json")
-OHLCV_DIR = Path("data/raw/ohlcv")
+MODELS_DIR = ROOT_DIR / "artifacts" / "models"
 
 
 # -----------------------------
@@ -309,19 +305,10 @@ def log_to_simple(x: float) -> float:
 
 
 def load_symbol_to_yahoo_ticker() -> Dict[str, str]:
-    if not COINS_PATH.exists():
-        raise FileNotFoundError(f"coins.json not found: {COINS_PATH}")
-    data = json.loads(COINS_PATH.read_text(encoding="utf-8"))
-    coins = data.get("coins", [])
-    m: Dict[str, str] = {}
-    for c in coins:
-        sym = str(c.get("symbol", "")).upper().strip()
-        yt = str(c.get("yahoo_ticker", "")).strip()
-        if sym and yt:
-            m[sym] = yt
-    if not m:
-        raise FileNotFoundError(f"No symbol->yahoo_ticker mappings found in {COINS_PATH}")
-    return m
+    mapping = get_coin_repository().get_symbol_to_ticker_map()
+    if not mapping:
+        raise FileNotFoundError("No symbol->yahoo_ticker mappings found in Coins table.")
+    return mapping
 
 
 def _validate_horizon_args(end_date: Optional[str], horizon_days: Optional[int]) -> None:
@@ -384,7 +371,7 @@ def load_bundle(symbol: str):
 
     ticker = _SYMBOL_TO_TICKER.get(sym)
     if not ticker:
-        raise FileNotFoundError(f"No yahoo_ticker mapping found for symbol={sym} in {COINS_PATH}")
+        raise FileNotFoundError(f"No yahoo_ticker mapping found for symbol={sym} in Coins table.")
 
     path = MODELS_DIR / ticker / "quantile_model_bundle.joblib"
     if not path.exists():
@@ -397,10 +384,9 @@ def load_bundle(symbol: str):
 
 
 def load_features_df(symbol: str) -> pd.DataFrame:
-    path = FEATURES_DIR / f"{symbol.upper()}_features.csv"
-    if not path.exists():
-        raise FileNotFoundError(f"Features CSV not found: {path}")
-    df = pd.read_csv(path)
+    df = get_market_data_repository().read_features(symbol=symbol)
+    if df.empty:
+        raise FileNotFoundError(f"Features data not found for symbol={symbol.upper()}.")
     df["date"] = pd.to_datetime(df["date"], format="%Y-%m-%d", errors="coerce")
     df = df.dropna(subset=["date"]).sort_values("date").reset_index(drop=True)
     return df
@@ -409,8 +395,7 @@ def load_features_df(symbol: str) -> pd.DataFrame:
 def load_price_df(symbol: str) -> pd.DataFrame:
     """
     Portfolio pipeline expects a 'price_df' per asset.
-    We load from data/raw/ohlcv/<YAHOO_TICKER>_daily.csv (ex: BTC-USD_daily.csv),
-    and keep at least date/close columns.
+    We load OHLCV rows from the database and keep at least date/close columns.
     """
     global _SYMBOL_TO_TICKER
     sym = symbol.upper().strip()
@@ -419,20 +404,18 @@ def load_price_df(symbol: str) -> pd.DataFrame:
 
     ticker = _SYMBOL_TO_TICKER.get(sym)
     if not ticker:
-        raise FileNotFoundError(f"No yahoo_ticker mapping found for symbol={sym} in {COINS_PATH}")
+        raise FileNotFoundError(f"No yahoo_ticker mapping found for symbol={sym} in Coins table.")
 
-    path = OHLCV_DIR / f"{ticker}_daily.csv"
-    if not path.exists():
-        raise FileNotFoundError(f"OHLCV CSV not found: {path}")
-
-    df = pd.read_csv(path)
+    df = get_market_data_repository().read_ohlcv(yahoo_ticker=ticker)
+    if df.empty:
+        raise FileNotFoundError(f"OHLCV data not found for symbol={sym}.")
     if "date" not in df.columns:
-        raise HTTPException(status_code=500, detail=f"OHLCV CSV missing 'date' column: {path}")
+        raise HTTPException(status_code=500, detail=f"OHLCV data missing 'date' column for symbol={sym}.")
     if "close" not in df.columns:
         if "Close" in df.columns:
             df = df.rename(columns={"Close": "close"})
         else:
-            raise HTTPException(status_code=500, detail=f"OHLCV CSV missing 'close' column: {path}")
+            raise HTTPException(status_code=500, detail=f"OHLCV data missing 'close' column for symbol={sym}.")
 
     df["date"] = pd.to_datetime(df["date"], errors="coerce")
     df = df.dropna(subset=["date"]).sort_values("date").reset_index(drop=True)
@@ -1124,8 +1107,8 @@ async def forecast_horizon_endpoint(req: HorizonRequest):
     if req.engine == "fast_regime_fixed":
         try:
             bundle = load_bundle(req.symbol)
-        except json.JSONDecodeError as e:
-            raise HTTPException(status_code=500, detail=f"Failed to parse coins.json: {e}")
+        except KeyError as e:
+            raise HTTPException(status_code=404, detail=str(e))
 
     symbol = req.symbol.upper().strip()
 
