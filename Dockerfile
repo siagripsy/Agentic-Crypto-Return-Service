@@ -5,7 +5,7 @@ WORKDIR /app/crypto-risk-dashboard
 
 COPY crypto-risk-dashboard/package.json ./
 RUN npm install --include=optional
-RUN npm install @rollup/rollup-linux-x64-gnu --save-optional
+RUN node -e "require('rollup'); require('@rollup/rollup-linux-x64-gnu')"
 
 COPY crypto-risk-dashboard/ ./
 RUN npm run build
