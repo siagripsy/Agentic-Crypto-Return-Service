@@ -5,14 +5,18 @@ import json
 from dataclasses import dataclass
 from typing import Any, Dict, Literal
 
-from core.explain.fallback import explain_forecast_fallback, explain_portfolio_fallback
+from core.explain.fallback import (
+    explain_crypto_return_service_fallback,
+    explain_forecast_fallback,
+    explain_portfolio_fallback,
+)
 from core.explain.llm_client import LLMConfig, build_llm_client
 
 
-ExplainTarget = Literal["forecast", "portfolio"]
+ExplainTarget = Literal["forecast", "portfolio", "crypto_return_service"]
 
 
-SYSTEM_PROMPT = """You explain crypto forecast and portfolio outputs conservatively.
+SYSTEM_PROMPT_DEFAULT = """You explain crypto forecast and portfolio outputs conservatively.
 
 Rules:
 - Return STRICT JSON only.
@@ -31,6 +35,50 @@ Schema:
   "disclaimer": "<string>",
   "bullets": ["<string>", "..."],
   "narrative": "<string>"
+}
+"""
+
+
+SYSTEM_PROMPT_CRYPTO_RETURN_SERVICE = """You explain combined crypto regime matching, scenario engine, and portfolio outputs conservatively.
+
+Rules:
+- Return STRICT JSON only.
+- No markdown.
+- No code fences.
+- No extra text before or after the JSON.
+- Use only values present in the payload.
+- Do not invent unavailable fields.
+- Do not give financial advice.
+- Do not recommend buying, selling, or holding.
+- Keep the language easy to read.
+- Mention uncertainty where relevant.
+- Each bullet must be one sentence.
+- Make the explanation materially detailed and decision-useful without becoming verbose.
+- Keep overall_summary to 4 to 6 sentences with concrete comparisons across assets when possible.
+- Each section headline should contain a specific takeaway, not a generic label.
+- Each section must have 5 bullets.
+- Bullets should mention concrete signals such as probabilities, median outcomes, ranges, drawdowns, CVaR, weight concentration, or uncertainty when those values exist.
+- If a value is unavailable, explain the gap rather than inventing it.
+
+Return exactly this schema:
+{
+  "mode": "llm",
+  "disclaimer": "<string>",
+  "overall_summary": "<4 to 6 sentences>",
+  "sections": {
+    "regime_matching": {
+      "headline": "<string>",
+      "bullets": ["<string>", "<string>", "<string>", "<string>", "<string>"]
+    },
+    "scenario_engine": {
+      "headline": "<string>",
+      "bullets": ["<string>", "<string>", "<string>", "<string>", "<string>"]
+    },
+    "risk_portfolio": {
+      "headline": "<string>",
+      "bullets": ["<string>", "<string>", "<string>", "<string>", "<string>"]
+    }
+  }
 }
 """
 
@@ -97,7 +145,82 @@ def _compact_portfolio_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def _compact_crypto_return_service_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
+    regime_matching = payload.get("regime_matching") or {}
+    scenario_engine = payload.get("scenario_engine") or {}
+    risks = payload.get("risks") or {}
+    portfolio = payload.get("portfolio") or {}
+
+    compact_assets: Dict[str, Any] = {}
+    all_assets = set(regime_matching.keys()) | set(scenario_engine.keys()) | set(risks.keys())
+    for asset in sorted(all_assets):
+        regime_block = regime_matching.get(asset) or {}
+        regime_summary = regime_block.get("summary") or {}
+        profit_analysis = regime_summary.get("profit_analysis") or {}
+        loss_analysis = regime_summary.get("loss_analysis") or {}
+        drawdown_analysis = regime_summary.get("drawdown_analysis") or {}
+        top_matches = []
+        for match in (regime_block.get("matches") or [])[:3]:
+            top_matches.append(
+                {
+                    "rank": match.get("rank"),
+                    "window_start_date": match.get("window_start_date"),
+                    "window_end_date": match.get("window_end_date"),
+                    "forward_end_date": match.get("forward_end_date"),
+                    "similarity": match.get("similarity"),
+                    "profit_pct": match.get("profit_pct"),
+                    "max_drawdown_pct": match.get("max_drawdown_pct"),
+                }
+            )
+
+        scenario_summary = (scenario_engine.get(asset) or {}).get("summary") or {}
+        risk_block = risks.get(asset) or {}
+
+        compact_assets[asset] = {
+            "regime_matching": {
+                "prob_profit": regime_summary.get("prob_profit"),
+                "mean_profit": profit_analysis.get("mean_profit"),
+                "mean_loss": loss_analysis.get("mean_loss"),
+                "mean_max_drawdown": drawdown_analysis.get("mean_max_drawdown"),
+                "top_matches": top_matches,
+            },
+            "scenario_engine": {
+                "start_price": scenario_summary.get("start_price"),
+                "terminal_mean": scenario_summary.get("terminal_mean"),
+                "terminal_median": scenario_summary.get("terminal_median"),
+                "terminal_p05": scenario_summary.get("terminal_p05"),
+                "terminal_p95": scenario_summary.get("terminal_p95"),
+            },
+            "risk_metrics": {
+                "var": risk_block.get("var"),
+                "cvar": risk_block.get("cvar"),
+                "max_drawdown_est": risk_block.get("max_drawdown_est"),
+                "prob_profit": (risk_block.get("tail_metrics") or {}).get("prob_profit"),
+                "expected_return_mean": ((risk_block.get("tail_metrics") or {}).get("horizon_return_summary") or {}).get("mean"),
+            },
+        }
+
+    return {
+        "input": {
+            "capital": (payload.get("input") or {}).get("capital"),
+            "horizon_days": (payload.get("input") or {}).get("horizon_days"),
+            "n_scenarios": (payload.get("input") or {}).get("n_scenarios"),
+            "risk_tolerance": (payload.get("input") or {}).get("risk_tolerance"),
+        },
+        "assets": compact_assets,
+        "portfolio": {
+            "weights": portfolio.get("weights"),
+            "details": portfolio.get("details"),
+            "portfolio_expected_return": portfolio.get("portfolio_expected_return"),
+            "portfolio_cvar": portfolio.get("portfolio_cvar"),
+            "portfolio_max_drawdown_est": portfolio.get("portfolio_max_drawdown_est"),
+        },
+    }
+
+
 def _compact_payload(target: ExplainTarget, payload: Dict[str, Any]) -> Dict[str, Any]:
+    if target == "crypto_return_service":
+        return _compact_crypto_return_service_payload(payload)
     if target == "portfolio":
         return _compact_portfolio_payload(payload)
     return _compact_forecast_payload(payload)
@@ -138,7 +261,7 @@ class ExplanationEngine:
         try:
             print(f"[explain] calling llm target={target} prompt_chars={len(compact_json)}")
             out = await self._client.generate_json(
-                system=SYSTEM_PROMPT,
+                system=SYSTEM_PROMPT_CRYPTO_RETURN_SERVICE if target == "crypto_return_service" else SYSTEM_PROMPT_DEFAULT,
                 user=f"Target={target}\nPayload={compact_json}",
                 timeout_s=self.cfg.timeout_s,
             )
@@ -148,9 +271,21 @@ class ExplanationEngine:
                 raise ValueError("LLM output not a dict")
 
             out["mode"] = "llm"
-            out.setdefault("disclaimer", _default_disclaimer())
-            out.setdefault("bullets", [])
-            out.setdefault("narrative", "")
+            if target == "crypto_return_service":
+                out.setdefault("disclaimer", _default_disclaimer())
+                out.setdefault("overall_summary", "")
+                out.setdefault(
+                    "sections",
+                    {
+                        "regime_matching": {"headline": "", "bullets": []},
+                        "scenario_engine": {"headline": "", "bullets": []},
+                        "risk_portfolio": {"headline": "", "bullets": []},
+                    },
+                )
+            else:
+                out.setdefault("disclaimer", _default_disclaimer())
+                out.setdefault("bullets", [])
+                out.setdefault("narrative", "")
             return out
 
         except Exception as e:
@@ -158,6 +293,8 @@ class ExplanationEngine:
             return self._fallback(target, payload)
 
     def _fallback(self, target: ExplainTarget, payload: Dict[str, Any]) -> Dict[str, Any]:
+        if target == "crypto_return_service":
+            return explain_crypto_return_service_fallback(payload)
         if target == "portfolio":
             return explain_portfolio_fallback(payload)
         return explain_forecast_fallback(payload)

@@ -1,24 +1,31 @@
-import { NavLink, Outlet } from "react-router-dom";
+import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { logout } from "../utils/auth";
 
 export default function Layout() {
+  const navigate = useNavigate();
+
   return (
     <div className="app-shell">
       <header className="app-header">
-        <div className="app-title">Agentic Probabilistic Crypto Return Service — Dashboard</div>
+        <div>
+          <div className="eyebrow">Dashboard</div>
+          <div className="app-title">Agentic Probabilistic Crypto Return Service</div>
+        </div>
 
         <nav className="app-nav">
-          <NavLink
-            to="/forecast"
-            className={({ isActive }) => (isActive ? "active" : "")}
-          >
-            Forecast
+          <NavLink to="/crypto-service" className={({ isActive }) => (isActive ? "active" : "")}>
+            Workspace
           </NavLink>
-          <NavLink
-            to="/portfolio"
-            className={({ isActive }) => (isActive ? "active" : "")}
+          <button
+            type="button"
+            className="ghost-btn"
+            onClick={() => {
+              logout();
+              navigate("/login", { replace: true });
+            }}
           >
-            Portfolio
-          </NavLink>
+            Logout
+          </button>
         </nav>
       </header>
 

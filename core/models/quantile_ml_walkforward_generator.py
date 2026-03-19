@@ -5,10 +5,10 @@ from typing import Dict, Any, Optional, List, Tuple
 
 import os
 from pathlib import Path
-import joblib
 import numpy as np
 import pandas as pd
 
+from core.models.model_bundle_loader import load_quantile_model_bundle
 from core.models.scenario_generator_base import BaseScenarioGenerator, ScenarioResult
 from core.models.probabilistic_quantile import predict_quantiles, sample_from_quantiles
 
@@ -53,11 +53,15 @@ class QuantileMLWalkForwardScenarioGenerator(BaseScenarioGenerator):
                 return str(s.iloc[-1])
         return fallback
 
-    def _load_bundle(self, models_root: str, ticker: str) -> Dict[str, Any]:
+    def _load_bundle(
+        self,
+        models_root: str,
+        ticker: str,
+        *,
+        features_df: Optional[pd.DataFrame] = None,
+    ) -> Dict[str, Any]:
         path = os.path.join(models_root, ticker, "quantile_model_bundle.joblib")
-        if not os.path.exists(path):
-            raise FileNotFoundError(f"Model bundle not found: {path}")
-        return joblib.load(path)
+        return load_quantile_model_bundle(path, ticker=ticker, features_df=features_df)
 
     def _prep_features_df(self, features_df: pd.DataFrame) -> pd.DataFrame:
         df = features_df.copy()
@@ -166,7 +170,7 @@ class QuantileMLWalkForwardScenarioGenerator(BaseScenarioGenerator):
         df = self._prep_features_df(features_df)
         ticker = self._infer_ticker(features_df)
 
-        bundle_obj = self._load_bundle(cfg.models_root, ticker)
+        bundle_obj = self._load_bundle(cfg.models_root, ticker, features_df=df)
         bundle = bundle_obj["bundle"]
         feature_cols = [c.lower() for c in bundle.feature_cols]
 
