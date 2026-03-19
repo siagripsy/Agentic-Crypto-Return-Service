@@ -1110,6 +1110,16 @@ def health():
 def list_asset_options():
     rows = []
     try:
+        for symbol, yahoo_ticker in sorted(_fallback_symbol_to_ticker_map().items()):
+            rows.append(
+                {
+                    "symbol": symbol,
+                    "yahoo_ticker": yahoo_ticker,
+                }
+            )
+        if rows:
+            return {"items": rows}
+
         repository = get_coin_repository()
         for coin in repository.as_dataframe().sort_values(by=["symbol"]).to_dict(orient="records"):
             yahoo_ticker = str(coin.get("yahoo_ticker", "")).strip().upper()

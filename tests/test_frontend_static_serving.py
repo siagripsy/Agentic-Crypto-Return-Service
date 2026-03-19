@@ -67,3 +67,23 @@ def test_portfolio_api_route_still_wins():
     response = client.post("/portfolio/recommend", json={})
 
     assert response.status_code != 200
+
+
+def test_assets_options_prefers_local_artifacts(monkeypatch):
+    monkeypatch.setattr(main_module, "_fallback_symbol_to_ticker_map", lambda: {"BTC": "BTC-USD", "ETH": "ETH-USD"})
+
+    def fail_if_called():
+        raise AssertionError("database should not be queried when artifact options are available")
+
+    monkeypatch.setattr(main_module, "get_coin_repository", fail_if_called)
+
+    client = TestClient(main_module.app)
+    response = client.get("/assets/options")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "items": [
+            {"symbol": "BTC", "yahoo_ticker": "BTC-USD"},
+            {"symbol": "ETH", "yahoo_ticker": "ETH-USD"},
+        ]
+    }
