@@ -1,5 +1,6 @@
 import os
 import pickle
+import warnings
 from typing import Tuple, List, Optional, Dict
 from pathlib import Path
 
@@ -11,6 +12,7 @@ from sklearn.preprocessing import StandardScaler
 from torch.utils.data import DataLoader, TensorDataset
 
 from core.models.regime_autoencoder import RegimeAutoencoder
+from core.numpy_compat import setup_numpy_compatibility
 
 
 FEATURE_COLUMNS = [
@@ -26,6 +28,27 @@ FEATURE_COLUMNS = [
 
 
 DEFAULT_ARTIFACTS_DIR = str(Path(__file__).resolve().parents[2] / "artifacts" / "models")
+
+
+def _load_pickle_with_numpy_compat(path: str):
+    """
+    Load a pickle after installing NumPy compatibility aliases.
+
+    Some artifacts were produced in environments whose private NumPy module
+    paths differ from the deployment runtime. We retry once after reapplying
+    compatibility shims so the API can continue using existing artifacts.
+    """
+    setup_numpy_compatibility()
+
+    try:
+        with open(path, "rb") as f:
+            return pickle.load(f)
+    except ModuleNotFoundError as exc:
+        if getattr(exc, "name", "") and not str(exc.name).startswith("numpy"):
+            raise
+        setup_numpy_compatibility()
+        with open(path, "rb") as f:
+            return pickle.load(f)
 
 
 # ----------------------------------------------------------------------
@@ -214,11 +237,19 @@ def load_regime_artifacts(
     if not (os.path.exists(model_path) and os.path.exists(scaler_path) and os.path.exists(cfg_path)):
         return None
 
-    with open(scaler_path, "rb") as f:
-        scaler = pickle.load(f)
-
-    with open(cfg_path, "rb") as f:
-        saved_train_cfg = pickle.load(f)
+    try:
+        scaler = _load_pickle_with_numpy_compat(scaler_path)
+        saved_train_cfg = _load_pickle_with_numpy_compat(cfg_path)
+    except Exception as exc:
+        warnings.warn(
+            (
+                f"Failed to load cached regime artifacts for {ticker}; "
+                f"falling back to retraining. Original error: {exc}"
+            ),
+            RuntimeWarning,
+            stacklevel=2,
+        )
+        return None
 
     input_dim = match_window_days * len(FEATURE_COLUMNS)
     model = RegimeAutoencoder(input_dim=input_dim, latent_dim=latent_dim)

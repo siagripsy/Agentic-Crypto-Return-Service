@@ -1,51 +1,88 @@
-"""
-Custom pickle handler for numpy compatibility
-Handles old pickled numpy models that reference classes that no longer exist
-"""
-import sys
-import numpy as np
+"""Compatibility helpers for loading legacy NumPy-backed pickle artifacts."""
 
-def setup_numpy_compatibility():
+from __future__ import annotations
+
+import importlib
+import sys
+
+
+def _alias_module(alias: str, target: str) -> None:
+    """Register an import alias if the target module is available."""
+    if alias in sys.modules:
+        return
+
+    try:
+        sys.modules[alias] = importlib.import_module(target)
+    except Exception:
+        # Best-effort shim only; callers still get the real load error if aliasing is insufficient.
+        return
+
+
+def setup_numpy_compatibility() -> None:
     """
-    Setup numpy compatibility for old pickles.
-    Adds compatibility shims for numpy.random classes that changed between versions.
+    Install compatibility shims for older pickles.
+
+    Some previously saved artifacts reference private NumPy module paths such as
+    ``numpy._core`` or legacy ``numpy.random`` internals. Newer/older runtimes
+    may expose slightly different import paths, so we register lightweight
+    aliases before unpickling.
     """
     import numpy.random as nr
-    
-    # Create dummy classes for old numpy.random internals
+
+    # Map private/core module paths across NumPy versions.
+    module_aliases = {
+        "numpy._core": "numpy.core",
+        "numpy._core.multiarray": "numpy.core.multiarray",
+        "numpy._core.numeric": "numpy.core.numeric",
+        "numpy._core.numerictypes": "numpy.core.numerictypes",
+        "numpy._core.umath": "numpy.core.umath",
+        "numpy._core._multiarray_umath": "numpy.core._multiarray_umath",
+        "numpy.core": "numpy._core",
+        "numpy.core.multiarray": "numpy._core.multiarray",
+        "numpy.core.numeric": "numpy._core.numeric",
+        "numpy.core.numerictypes": "numpy._core.numerictypes",
+        "numpy.core.umath": "numpy._core.umath",
+        "numpy.core._multiarray_umath": "numpy._core._multiarray_umath",
+    }
+
+    for alias, target in module_aliases.items():
+        _alias_module(alias, target)
+
     class MT19937:
-        """Dummy MT19937 for old pickles"""
+        """Fallback MT19937 stub for legacy pickles."""
+
         def __init__(self):
             self.state = None
-    
+
     class RandomState:
-        """Dummy RandomState for old pickles"""
+        """Fallback RandomState stub for legacy pickles."""
+
         def __init__(self):
             self.state = None
-    
+
     class Generator:
-        """Dummy Generator for old pickles"""
+        """Fallback Generator stub for legacy pickles."""
+
         def __init__(self):
             self.bit_generator = None
-    
-    # Register these in numpy.random so pickle can find them
-    if not hasattr(nr, 'MT19937'):
+
+    if not hasattr(nr, "MT19937"):
         nr.MT19937 = MT19937
-    if not hasattr(nr, 'RandomState'):
+    if not hasattr(nr, "RandomState"):
         nr.RandomState = RandomState
-    if not hasattr(nr, 'Generator'):
+    if not hasattr(nr, "Generator"):
         nr.Generator = Generator
-    
-    # Also add to sys.modules for pickle's import system
-    numpy_random_module = sys.modules.get('numpy.random')
+
+    numpy_random_module = sys.modules.get("numpy.random")
     if numpy_random_module:
-        if not hasattr(numpy_random_module, 'MT19937'):
+        if not hasattr(numpy_random_module, "MT19937"):
             numpy_random_module.MT19937 = MT19937
-        if not hasattr(numpy_random_module, 'RandomState'):
+        if not hasattr(numpy_random_module, "RandomState"):
             numpy_random_module.RandomState = RandomState
-        if not hasattr(numpy_random_module, 'Generator'):
+        if not hasattr(numpy_random_module, "Generator"):
             numpy_random_module.Generator = Generator
+
 
 if __name__ == "__main__":
     setup_numpy_compatibility()
-    print("✅ Numpy compatibility patching activated")
+    print("NumPy compatibility patching activated")
