@@ -224,3 +224,5 @@ dist/
 build/
 .env
 *.tsbuildinfo
+!crypto-risk-dashboard/dist/
+!crypto-risk-dashboard/dist/**

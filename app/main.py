@@ -1558,7 +1558,12 @@ def serve_frontend_root():
 @app.get("/{full_path:path}")
 def serve_frontend_spa(full_path: str):
     # Do not intercept API/docs/openapi routes
-    if full_path.startswith("forecast") or full_path.startswith("portfolio") or full_path.startswith("crypto_return_service") or full_path.startswith("health") or full_path.startswith("assets"):
+    if (
+        full_path.startswith("forecast/")
+        or full_path.startswith("portfolio/")
+        or full_path.startswith("crypto_return_service")
+        or full_path.startswith("health")
+    ):
         return JSONResponse(status_code=404, content={"detail": "Not Found"})
     if full_path in {"docs", "openapi.json", "redoc"}:
         return JSONResponse(status_code=404, content={"detail": "Not Found"})

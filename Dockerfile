@@ -4,7 +4,8 @@ FROM node:20-bookworm-slim AS frontend-builder
 WORKDIR /app/crypto-risk-dashboard
 
 COPY crypto-risk-dashboard/package.json ./
-RUN npm install --include=optional
+COPY crypto-risk-dashboard/package-lock.json ./
+RUN npm ci --include=optional
 RUN node -e "require('rollup'); require('@rollup/rollup-linux-x64-gnu')"
 
 COPY crypto-risk-dashboard/ ./
