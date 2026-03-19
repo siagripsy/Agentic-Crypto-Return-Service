@@ -1,8 +1,15 @@
 export default function ErrorBanner({ error }: { error: unknown }) {
   const msg = error instanceof Error ? error.message : String(error);
   return (
-    <div style={{ padding: 12, borderRadius: 12, border: "1px solid #ffcccc", background: "#fff5f5" }}>
-      <b>Error:</b> {msg}
+    <div
+      className="card"
+      style={{
+        borderColor: "rgba(185, 28, 28, 0.18)",
+        background: "rgba(254, 242, 242, 0.95)",
+        color: "#991b1b"
+      }}
+    >
+      <strong>Error:</strong> {msg}
     </div>
   );
 }

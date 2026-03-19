@@ -8,10 +8,14 @@ import time
 from collections import deque
 from dataclasses import asdict, is_dataclass
 
-import joblib
 import numpy as np
 import pandas as pd
 import anyio
+
+# Setup numpy compatibility for old pickles
+from core.numpy_compat import setup_numpy_compatibility
+setup_numpy_compatibility()
+
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -19,6 +23,7 @@ from pydantic import BaseModel, Field
 
 # Fast (regime-fixed) horizon sampling
 from core.models.horizon_scenarios import forecast_horizon
+from core.models.model_bundle_loader import load_quantile_model_bundle
 
 # VaR/CVaR helper for regime-fixed risk curve (on samples)
 from core.models.probabilistic_quantile import var_cvar
@@ -36,7 +41,11 @@ from core.services.user_portfolio_workflow import run_Crypto_Return_Service
 
 # Explanation engine (LLM-first + deterministic fallback)
 from core.explain.explanation_agent import load_explanation_engine_from_env
-from core.explain.fallback import explain_forecast_fallback, explain_portfolio_fallback
+from core.explain.fallback import (
+    explain_crypto_return_service_fallback,
+    explain_forecast_fallback,
+    explain_portfolio_fallback,
+)
 from core.storage.coin_repository import get_coin_repository
 from core.storage.market_data_repository import get_market_data_repository
 
@@ -68,7 +77,7 @@ app.add_middleware(
 )
 
 if FRONTEND_ASSETS_DIR.exists():
-    app.mount("/assets", StaticFiles(directory=FRONTEND_ASSETS_DIR), name="assets")
+    app.mount("/static", StaticFiles(directory=FRONTEND_ASSETS_DIR), name="static")
 
 
 # -----------------------------
@@ -163,6 +172,8 @@ async def _build_explanation(
 ) -> Dict[str, Any]:
     """Return an explanation dict. If mode='fallback', force deterministic fallback."""
     if mode == "fallback":
+        if target == "crypto_return_service":
+            return explain_crypto_return_service_fallback(payload)
         return explain_portfolio_fallback(payload) if target == "portfolio" else explain_forecast_fallback(payload)
     # mode == "llm" (LLM-first engine will still fallback safely if unconfigured)
     return await EXPLAIN_ENGINE.explain(target=target, payload=payload)
@@ -304,10 +315,28 @@ def log_to_simple(x: float) -> float:
     return float(np.exp(x) - 1.0)
 
 
+def _fallback_symbol_to_ticker_map() -> Dict[str, str]:
+    mapping: Dict[str, str] = {}
+    if MODELS_DIR.exists():
+        for child in sorted(MODELS_DIR.iterdir()):
+            if not child.is_dir():
+                continue
+            ticker = child.name.strip().upper()
+            if not ticker:
+                continue
+            symbol = ticker.split("-", 1)[0]
+            if symbol and ticker.endswith("-USD"):
+                mapping[symbol] = ticker
+    return mapping
+
+
 def load_symbol_to_yahoo_ticker() -> Dict[str, str]:
-    mapping = get_coin_repository().get_symbol_to_ticker_map()
+    try:
+        mapping = get_coin_repository().get_symbol_to_ticker_map()
+    except Exception:
+        mapping = _fallback_symbol_to_ticker_map()
     if not mapping:
-        raise FileNotFoundError("No symbol->yahoo_ticker mappings found in Coins table.")
+        raise FileNotFoundError("No symbol->yahoo_ticker mappings found in Coins table or model artifacts.")
     return mapping
 
 
@@ -374,13 +403,8 @@ def load_bundle(symbol: str):
         raise FileNotFoundError(f"No yahoo_ticker mapping found for symbol={sym} in Coins table.")
 
     path = MODELS_DIR / ticker / "quantile_model_bundle.joblib"
-    if not path.exists():
-        raise FileNotFoundError(f"Model bundle not found: {path}")
-
-    obj = joblib.load(path)
-    if isinstance(obj, dict) and "bundle" in obj:
-        return obj["bundle"]
-    return obj
+    obj = load_quantile_model_bundle(path, symbol=sym, ticker=ticker)
+    return obj["bundle"]
 
 
 def load_features_df(symbol: str) -> pd.DataFrame:
@@ -1063,12 +1087,16 @@ def serialize_crypto_return_service_result(result: dict) -> dict:
 
         scenario_engine_serialized[asset] = se_dict
 
-    return {
+    response = {
+        "input": result.get("input"),
         "regime_matching": result["regime_matching"],
         "scenario_engine": scenario_engine_serialized,
         "risks": risks,
         "portfolio": portfolio_dict,
     }
+    if "explanation" in result:
+        response["explanation"] = result["explanation"]
+    return response
 
 # -----------------------------
 # Endpoints
@@ -1077,14 +1105,49 @@ def serialize_crypto_return_service_result(result: dict) -> dict:
 def health():
     return {"status": "ok"}
 
+
+@app.get("/assets/options")
+def list_asset_options():
+    rows = []
+    try:
+        repository = get_coin_repository()
+        for coin in repository.as_dataframe().sort_values(by=["symbol"]).to_dict(orient="records"):
+            yahoo_ticker = str(coin.get("yahoo_ticker", "")).strip().upper()
+            symbol = str(coin.get("symbol", "")).strip().upper()
+            if not yahoo_ticker:
+                continue
+            rows.append(
+                {
+                    "symbol": symbol,
+                    "yahoo_ticker": yahoo_ticker,
+                }
+            )
+    except Exception:
+        for symbol, yahoo_ticker in load_symbol_to_yahoo_ticker().items():
+            rows.append(
+                {
+                    "symbol": symbol,
+                    "yahoo_ticker": yahoo_ticker,
+                }
+            )
+    return {"items": rows}
+
 from app.schemas.crypto_return_service import CryptoReturnServiceRequest
 
 @app.post("/crypto_return_service")
-def crypto_return_service(request: CryptoReturnServiceRequest):
+async def crypto_return_service(request: CryptoReturnServiceRequest):
+    user_input = _pydantic_dump(request)
+    result = await anyio.to_thread.run_sync(run_Crypto_Return_Service, user_input)
+    serialized = serialize_crypto_return_service_result(result)
 
-    user_input = request.dict()
-    result = run_Crypto_Return_Service(user_input)
-    return serialize_crypto_return_service_result(result)
+    if request.include_explanation:
+        serialized["explanation"] = await _build_explanation(
+            target="crypto_return_service",
+            mode=request.explanation_mode,
+            payload=serialized,
+        )
+
+    return serialized
     
 #-----------------------------------------------------------    
 
@@ -1495,9 +1558,9 @@ def serve_frontend_root():
 @app.get("/{full_path:path}")
 def serve_frontend_spa(full_path: str):
     # Do not intercept API/docs/openapi routes
-    if full_path.startswith("forecast") or full_path.startswith("portfolio"):
+    if full_path.startswith("forecast") or full_path.startswith("portfolio") or full_path.startswith("crypto_return_service") or full_path.startswith("health") or full_path.startswith("assets"):
         return JSONResponse(status_code=404, content={"detail": "Not Found"})
-    if full_path in {"docs", "openapi.json", "redoc", "health"}:
+    if full_path in {"docs", "openapi.json", "redoc"}:
         return JSONResponse(status_code=404, content={"detail": "Not Found"})
 
     target = FRONTEND_DIST_DIR / full_path

@@ -1,22 +1,18 @@
+import type { ReactNode } from "react";
+
 export default function Card({
   title,
-  children
+  children,
+  className = ""
 }: {
   title?: string;
-  children: React.ReactNode;
+  children: ReactNode;
+  className?: string;
 }) {
   return (
-    <div
-      style={{
-        border: "1px solid #e9e9e9",
-        borderRadius: 14,
-        padding: 14,
-        background: "white",
-        boxShadow: "0 1px 10px rgba(0,0,0,0.03)"
-      }}
-    >
-      {title ? <div style={{ fontWeight: 700, marginBottom: 10 }}>{title}</div> : null}
+    <section className={`card ${className}`.trim()}>
+      {title ? <div className="card-title">{title}</div> : null}
       {children}
-    </div>
+    </section>
   );
 }

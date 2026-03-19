@@ -5,11 +5,11 @@ from typing import Optional
 
 import numpy as np
 import pandas as pd
-import joblib
 import streamlit as st
 import matplotlib.pyplot as plt
 
 from core.models.horizon_scenarios import forecast_horizon
+from core.models.model_bundle_loader import load_quantile_model_bundle
 from core.storage.coin_repository import get_coin_repository
 from core.storage.market_data_repository import get_market_data_repository
 
@@ -50,12 +50,8 @@ def log_to_simple(x: float) -> float:
 def load_bundle(symbol: str):
     ticker = get_coin_repository().get_by_symbol(symbol).yahoo_ticker
     path = MODELS_DIR / ticker / "quantile_model_bundle.joblib"
-    if not path.exists():
-        raise FileNotFoundError(f"Model bundle not found: {path}")
-    obj = joblib.load(path)
-    if isinstance(obj, dict) and "bundle" in obj:
-        return obj["bundle"]
-    return obj
+    obj = load_quantile_model_bundle(path, symbol=symbol, ticker=ticker)
+    return obj["bundle"]
 
 
 @st.cache_data   # # Loads and caches the processed feature dataset for the symbol, parsing and sorting by date.
