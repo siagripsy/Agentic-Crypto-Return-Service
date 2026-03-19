@@ -35,7 +35,7 @@ def _sample_features() -> pd.DataFrame:
 
 def test_load_quantile_model_bundle_rebuilds_incompatible_artifact(monkeypatch):
     bundle_path = Path("tests/.tmp/model_bundle_loader/artifacts/models/BTC-USD/quantile_model_bundle.joblib")
-    bundle_path.parent.mkdir(parents=True)
+    bundle_path.parent.mkdir(parents=True, exist_ok=True)
     bundle_path.write_bytes(b"placeholder")
 
     call_count = {"load": 0, "dump": 0}

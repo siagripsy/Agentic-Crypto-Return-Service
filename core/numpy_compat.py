@@ -37,12 +37,6 @@ def setup_numpy_compatibility() -> None:
         "numpy._core.numerictypes": "numpy.core.numerictypes",
         "numpy._core.umath": "numpy.core.umath",
         "numpy._core._multiarray_umath": "numpy.core._multiarray_umath",
-        "numpy.core": "numpy._core",
-        "numpy.core.multiarray": "numpy._core.multiarray",
-        "numpy.core.numeric": "numpy._core.numeric",
-        "numpy.core.numerictypes": "numpy._core.numerictypes",
-        "numpy.core.umath": "numpy._core.umath",
-        "numpy.core._multiarray_umath": "numpy._core._multiarray_umath",
     }
 
     for alias, target in module_aliases.items():
