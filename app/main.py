@@ -20,6 +20,7 @@ from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+from sqlalchemy import text
 
 # Fast (regime-fixed) horizon sampling
 from core.models.horizon_scenarios import forecast_horizon
@@ -104,6 +105,7 @@ MAX_SCENARIOS_ENSEMBLE = 5000
 
 DEFAULT_TIMEOUT_SINGLE = 12  # seconds
 DEFAULT_TIMEOUT_MULTI = 20   # seconds
+DEFAULT_TIMEOUT_DB = 15      # seconds
 
 # Rate limiting (simple in-memory per-IP)
 RATE_LIMIT_PER_MINUTE = 60
@@ -338,6 +340,60 @@ def load_symbol_to_yahoo_ticker() -> Dict[str, str]:
     if not mapping:
         raise FileNotFoundError("No symbol->yahoo_ticker mappings found in Coins table or model artifacts.")
     return mapping
+
+
+def _list_asset_option_rows_from_mapping(mapping: Dict[str, str]) -> List[Dict[str, str]]:
+    rows: List[Dict[str, str]] = []
+    for symbol, yahoo_ticker in sorted(mapping.items()):
+        normalized_symbol = str(symbol).strip().upper()
+        normalized_ticker = str(yahoo_ticker).strip().upper()
+        if not normalized_symbol or not normalized_ticker:
+            continue
+        rows.append(
+            {
+                "symbol": normalized_symbol,
+                "yahoo_ticker": normalized_ticker,
+            }
+        )
+    return rows
+
+
+def _list_coins_from_database() -> List[Dict[str, Any]]:
+    repository = get_coin_repository()
+    rows: List[Dict[str, Any]] = []
+    for coin in repository.as_dataframe().sort_values(by=["symbol"]).to_dict(orient="records"):
+        yahoo_ticker = str(coin.get("yahoo_ticker", "")).strip().upper()
+        symbol = str(coin.get("symbol", "")).strip().upper()
+        if not yahoo_ticker or not symbol:
+            continue
+        rows.append(
+            {
+                "coin_id": int(coin["CoinID"]),
+                "symbol": symbol,
+                "coingecko_id": str(coin.get("coingecko_id", "")).strip(),
+                "yahoo_ticker": yahoo_ticker,
+                "start_year": int(coin["start_year"]),
+            }
+        )
+    return rows
+
+
+def _check_database_connection() -> Dict[str, Any]:
+    started = time.perf_counter()
+    with get_engine().connect() as conn:
+        conn.execute(text("SELECT 1"))
+    elapsed = time.perf_counter() - started
+
+    cfg = DatabaseConfig()
+    using_cloud_connection = bool(cfg.cloud_connection_string)
+    return {
+        "status": "ok",
+        "elapsed_seconds": round(elapsed, 3),
+        "using_cloud_connection_string": using_cloud_connection,
+        "odbc_driver": cfg.odbc_driver,
+        "connect_timeout_seconds": cfg.connect_timeout_seconds,
+        "login_timeout_seconds": cfg.login_timeout_seconds,
+    }
 
 
 def _validate_horizon_args(end_date: Optional[str], horizon_days: Optional[int]) -> None:
@@ -1108,39 +1164,22 @@ def health():
 
 @app.get("/assets/options")
 def list_asset_options():
-    rows = []
-    try:
-        for symbol, yahoo_ticker in sorted(_fallback_symbol_to_ticker_map().items()):
-            rows.append(
-                {
-                    "symbol": symbol,
-                    "yahoo_ticker": yahoo_ticker,
-                }
-            )
-        if rows:
-            return {"items": rows}
+    return {"items": _list_asset_option_rows_from_mapping(_fallback_symbol_to_ticker_map())}
 
-        repository = get_coin_repository()
-        for coin in repository.as_dataframe().sort_values(by=["symbol"]).to_dict(orient="records"):
-            yahoo_ticker = str(coin.get("yahoo_ticker", "")).strip().upper()
-            symbol = str(coin.get("symbol", "")).strip().upper()
-            if not yahoo_ticker:
-                continue
-            rows.append(
-                {
-                    "symbol": symbol,
-                    "yahoo_ticker": yahoo_ticker,
-                }
-            )
-    except Exception:
-        for symbol, yahoo_ticker in load_symbol_to_yahoo_ticker().items():
-            rows.append(
-                {
-                    "symbol": symbol,
-                    "yahoo_ticker": yahoo_ticker,
-                }
-            )
-    return {"items": rows}
+
+@app.get("/coins/db")
+async def list_coins_from_db(timeout_seconds: int = DEFAULT_TIMEOUT_DB):
+    if timeout_seconds < 1 or timeout_seconds > 60:
+        raise HTTPException(status_code=400, detail="timeout_seconds must be between 1 and 60.")
+    rows = await _run_with_timeout(timeout_seconds, _list_coins_from_database)
+    return {"items": rows, "count": len(rows)}
+
+
+@app.get("/db/health")
+async def db_health(timeout_seconds: int = DEFAULT_TIMEOUT_DB):
+    if timeout_seconds < 1 or timeout_seconds > 60:
+        raise HTTPException(status_code=400, detail="timeout_seconds must be between 1 and 60.")
+    return await _run_with_timeout(timeout_seconds, _check_database_connection)
 
 from app.schemas.crypto_return_service import CryptoReturnServiceRequest
 
