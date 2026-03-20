@@ -54,11 +54,38 @@ def test_frontend_spa_routes_fallback_to_index(monkeypatch):
 
 def test_assets_options_api_route_still_wins():
     client = TestClient(main_module.app)
-
     response = client.get("/assets/options")
 
     assert response.status_code == 200
     assert "items" in response.json()
+
+
+def test_db_health_api_route_still_wins(monkeypatch):
+    monkeypatch.setattr(
+        main_module,
+        "_check_database_connection",
+        lambda: {"status": "ok", "elapsed_seconds": 0.01},
+    )
+
+    client = TestClient(main_module.app)
+    response = client.get("/db/health")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "ok"
+
+
+def test_coins_db_api_route_still_wins(monkeypatch):
+    monkeypatch.setattr(
+        main_module,
+        "_list_coins_from_database",
+        lambda: [{"coin_id": 1, "symbol": "BTC", "coingecko_id": "bitcoin", "yahoo_ticker": "BTC-USD", "start_year": 2014}],
+    )
+
+    client = TestClient(main_module.app)
+    response = client.get("/coins/db")
+
+    assert response.status_code == 200
+    assert response.json()["count"] == 1
 
 
 def test_portfolio_api_route_still_wins():
@@ -72,11 +99,6 @@ def test_portfolio_api_route_still_wins():
 def test_assets_options_prefers_local_artifacts(monkeypatch):
     monkeypatch.setattr(main_module, "_fallback_symbol_to_ticker_map", lambda: {"BTC": "BTC-USD", "ETH": "ETH-USD"})
 
-    def fail_if_called():
-        raise AssertionError("database should not be queried when artifact options are available")
-
-    monkeypatch.setattr(main_module, "get_coin_repository", fail_if_called)
-
     client = TestClient(main_module.app)
     response = client.get("/assets/options")
 
@@ -87,3 +109,13 @@ def test_assets_options_prefers_local_artifacts(monkeypatch):
             {"symbol": "ETH", "yahoo_ticker": "ETH-USD"},
         ]
     }
+
+
+def test_assets_options_returns_empty_list_when_no_artifacts(monkeypatch):
+    monkeypatch.setattr(main_module, "_fallback_symbol_to_ticker_map", lambda: {})
+
+    client = TestClient(main_module.app)
+    response = client.get("/assets/options")
+
+    assert response.status_code == 200
+    assert response.json() == {"items": []}

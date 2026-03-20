@@ -17,6 +17,7 @@ def get_engine() -> Engine:
             cfg.get_sqlalchemy_url(),
             future=True,
             pool_pre_ping=True,
+            connect_args={"timeout": cfg.login_timeout_seconds},
         )
     return _ENGINE
 
@@ -26,4 +27,3 @@ def reset_engine() -> None:
     if _ENGINE is not None:
         _ENGINE.dispose()
     _ENGINE = None
-
