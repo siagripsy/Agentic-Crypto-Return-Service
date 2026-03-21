@@ -74,6 +74,17 @@ def test_db_health_api_route_still_wins(monkeypatch):
     assert response.json()["status"] == "ok"
 
 
+def test_db_health_returns_structured_error(monkeypatch):
+    monkeypatch.setattr(main_module, "_check_database_connection", lambda: (_ for _ in ()).throw(RuntimeError("db down")))
+
+    client = TestClient(main_module.app)
+    response = client.get("/db/health")
+
+    assert response.status_code == 503
+    assert response.json()["status"] == "error"
+    assert "db down" in response.json()["error"]
+
+
 def test_coins_db_api_route_still_wins(monkeypatch):
     monkeypatch.setattr(
         main_module,
@@ -86,6 +97,17 @@ def test_coins_db_api_route_still_wins(monkeypatch):
 
     assert response.status_code == 200
     assert response.json()["count"] == 1
+
+
+def test_coins_db_returns_structured_error(monkeypatch):
+    monkeypatch.setattr(main_module, "_list_coins_from_database", lambda: (_ for _ in ()).throw(RuntimeError("db down")))
+
+    client = TestClient(main_module.app)
+    response = client.get("/coins/db")
+
+    assert response.status_code == 503
+    assert response.json()["status"] == "error"
+    assert "db down" in response.json()["error"]
 
 
 def test_portfolio_api_route_still_wins():

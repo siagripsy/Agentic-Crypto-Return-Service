@@ -49,6 +49,8 @@ from core.explain.fallback import (
 )
 from core.storage.coin_repository import get_coin_repository
 from core.storage.market_data_repository import get_market_data_repository
+from core.storage.database import get_engine
+from core.config.database_config import DatabaseConfig
 
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -390,6 +392,18 @@ def _check_database_connection() -> Dict[str, Any]:
         "status": "ok",
         "elapsed_seconds": round(elapsed, 3),
         "using_cloud_connection_string": using_cloud_connection,
+        "odbc_driver": cfg.odbc_driver,
+        "connect_timeout_seconds": cfg.connect_timeout_seconds,
+        "login_timeout_seconds": cfg.login_timeout_seconds,
+    }
+
+
+def _database_error_payload(exc: Exception) -> Dict[str, Any]:
+    cfg = DatabaseConfig()
+    return {
+        "status": "error",
+        "error": str(exc),
+        "using_cloud_connection_string": bool(cfg.cloud_connection_string),
         "odbc_driver": cfg.odbc_driver,
         "connect_timeout_seconds": cfg.connect_timeout_seconds,
         "login_timeout_seconds": cfg.login_timeout_seconds,
@@ -1171,7 +1185,12 @@ def list_asset_options():
 async def list_coins_from_db(timeout_seconds: int = DEFAULT_TIMEOUT_DB):
     if timeout_seconds < 1 or timeout_seconds > 60:
         raise HTTPException(status_code=400, detail="timeout_seconds must be between 1 and 60.")
-    rows = await _run_with_timeout(timeout_seconds, _list_coins_from_database)
+    try:
+        rows = await _run_with_timeout(timeout_seconds, _list_coins_from_database)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        return JSONResponse(status_code=503, content=_database_error_payload(exc))
     return {"items": rows, "count": len(rows)}
 
 
@@ -1179,7 +1198,12 @@ async def list_coins_from_db(timeout_seconds: int = DEFAULT_TIMEOUT_DB):
 async def db_health(timeout_seconds: int = DEFAULT_TIMEOUT_DB):
     if timeout_seconds < 1 or timeout_seconds > 60:
         raise HTTPException(status_code=400, detail="timeout_seconds must be between 1 and 60.")
-    return await _run_with_timeout(timeout_seconds, _check_database_connection)
+    try:
+        return await _run_with_timeout(timeout_seconds, _check_database_connection)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        return JSONResponse(status_code=503, content=_database_error_payload(exc))
 
 from app.schemas.crypto_return_service import CryptoReturnServiceRequest
 
