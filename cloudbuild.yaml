@@ -48,7 +48,7 @@ steps:
       - "--timeout"
       - "900"
       - "--set-env-vars"
-      - "EXPLAIN_ENABLED=1,EXPLAIN_PROVIDER=gemini,EXPLAIN_TIMEOUT_S=15,GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GOOGLE_CLOUD_LOCATION=${_REGION},GEMINI_MODEL=gemini-2.5-flash,DB_ODBC_DRIVER=ODBC Driver 18 for SQL Server"
+      - "EXPLAIN_ENABLED=1,EXPLAIN_PROVIDER=gemini,EXPLAIN_TIMEOUT_S=15,GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GOOGLE_CLOUD_LOCATION=${_REGION},GEMINI_MODEL=gemini-2.5-flash,DB_ODBC_DRIVER=ODBC Driver 18 for SQL Server,MODEL_ROOT=${_MODEL_ROOT}"
       - "--set-secrets"
       - "CLOUD_DB_CONNECTION_STRING=db-connection-string:latest,COINGECKO_API_KEY=coingecko-api-key:latest"
 
@@ -61,6 +61,7 @@ substitutions:
   _AR_REPO: "apcras-repo"
   _IMAGE_NAME: "apcras-api"
   _SERVICE_NAME: "apcras-api"
+  _MODEL_ROOT: "apcras-models-493310/models"
 
 options:
   logging: CLOUD_LOGGING_ONLY

@@ -11,9 +11,10 @@ import pandas as pd
 from core.models.model_bundle_loader import load_quantile_model_bundle
 from core.models.scenario_generator_base import BaseScenarioGenerator, ScenarioResult
 from core.models.probabilistic_quantile import predict_quantiles, sample_from_quantiles
+from core.storage.model_artifact_store import get_models_root_path
 
 
-DEFAULT_MODELS_ROOT = str(Path(__file__).resolve().parents[2] / "artifacts" / "models")
+DEFAULT_MODELS_ROOT = str(get_models_root_path())
 
 
 @dataclass

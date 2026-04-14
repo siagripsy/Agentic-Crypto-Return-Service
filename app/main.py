@@ -50,6 +50,7 @@ from core.explain.fallback import (
 from core.storage.coin_repository import get_coin_repository
 from core.storage.market_data_repository import get_market_data_repository
 from core.storage.database import get_engine
+from core.storage.model_artifact_store import get_models_root_path
 from core.config.database_config import DatabaseConfig
 
 from fastapi.middleware.cors import CORSMiddleware
@@ -90,9 +91,6 @@ if FRONTEND_ASSETS_DIR.exists():
 async def file_not_found_handler(request: Request, exc: FileNotFoundError):
     # Converts missing artifact/CSV crashes into clean 404s
     return JSONResponse(status_code=404, content={"detail": str(exc)})
-
-
-MODELS_DIR = ROOT_DIR / "artifacts" / "models"
 
 
 # -----------------------------
@@ -321,8 +319,9 @@ def log_to_simple(x: float) -> float:
 
 def _fallback_symbol_to_ticker_map() -> Dict[str, str]:
     mapping: Dict[str, str] = {}
-    if MODELS_DIR.exists():
-        for child in sorted(MODELS_DIR.iterdir()):
+    models_dir = get_models_root_path()
+    if models_dir.exists():
+        for child in sorted(models_dir.iterdir()):
             if not child.is_dir():
                 continue
             ticker = child.name.strip().upper()
@@ -472,7 +471,7 @@ def load_bundle(symbol: str):
     if not ticker:
         raise FileNotFoundError(f"No yahoo_ticker mapping found for symbol={sym} in Coins table.")
 
-    path = MODELS_DIR / ticker / "quantile_model_bundle.joblib"
+    path = get_models_root_path() / ticker / "quantile_model_bundle.joblib"
     obj = load_quantile_model_bundle(path, symbol=sym, ticker=ticker)
     return obj["bundle"]
 

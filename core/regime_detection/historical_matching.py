@@ -13,6 +13,7 @@ from torch.utils.data import DataLoader, TensorDataset
 
 from core.models.regime_autoencoder import RegimeAutoencoder
 from core.numpy_compat import setup_numpy_compatibility
+from core.storage.model_artifact_store import get_models_root_path
 
 
 FEATURE_COLUMNS = [
@@ -27,7 +28,7 @@ FEATURE_COLUMNS = [
 ]
 
 
-DEFAULT_ARTIFACTS_DIR = str(Path(__file__).resolve().parents[2] / "artifacts" / "models")
+DEFAULT_ARTIFACTS_DIR = str(get_models_root_path())
 
 
 def _load_pickle_with_numpy_compat(path: str):
