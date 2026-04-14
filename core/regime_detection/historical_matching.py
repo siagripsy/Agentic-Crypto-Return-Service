@@ -1,7 +1,6 @@
 import os
 import pickle
 import warnings
-import logging
 from typing import Tuple, List, Optional, Dict
 from pathlib import Path
 
@@ -14,10 +13,7 @@ from torch.utils.data import DataLoader, TensorDataset
 
 from core.models.regime_autoencoder import RegimeAutoencoder
 from core.numpy_compat import setup_numpy_compatibility
-from core.storage.model_artifact_store import get_models_root_path, describe_model_source
-
-
-logger = logging.getLogger(__name__)
+from core.storage.model_artifact_store import get_models_root_path, describe_model_source, emit_model_log
 
 
 FEATURE_COLUMNS = [
@@ -242,12 +238,10 @@ def load_regime_artifacts(
     if not (os.path.exists(model_path) and os.path.exists(scaler_path) and os.path.exists(cfg_path)):
         return None
 
-    logger.info(
-        "Regime artifacts load source=%s model_path=%s scaler_path=%s cfg_path=%s",
-        describe_model_source(model_path),
-        model_path,
-        scaler_path,
-        cfg_path,
+    emit_model_log(
+        "Regime artifacts load "
+        f"source={describe_model_source(model_path)} "
+        f"model_path={model_path} scaler_path={scaler_path} cfg_path={cfg_path}"
     )
 
     try:

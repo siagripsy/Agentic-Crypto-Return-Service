@@ -1,6 +1,4 @@
 from __future__ import annotations
-
-import logging
 from pathlib import Path
 from typing import Any
 import warnings
@@ -17,10 +15,7 @@ from core.models.probabilistic_quantile import (
 from core.numpy_compat import setup_numpy_compatibility
 from core.storage.coin_repository import get_coin_repository
 from core.storage.market_data_repository import get_market_data_repository
-from core.storage.model_artifact_store import describe_model_source
-
-
-logger = logging.getLogger(__name__)
+from core.storage.model_artifact_store import describe_model_source, emit_model_log
 
 
 def load_quantile_model_bundle(
@@ -39,7 +34,7 @@ def load_quantile_model_bundle(
     if not path.exists():
         raise FileNotFoundError(f"Model bundle not found: {path}")
 
-    logger.info("Model bundle load source=%s path=%s", describe_model_source(path), path)
+    emit_model_log(f"Model bundle load source={describe_model_source(path)} path={path}")
 
     setup_numpy_compatibility()
 

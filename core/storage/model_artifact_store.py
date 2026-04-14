@@ -1,15 +1,10 @@
 from __future__ import annotations
-
-import logging
 import os
 import threading
 from pathlib import Path
 from typing import Tuple
 
 from google.cloud import storage
-
-
-logger = logging.getLogger(__name__)
 
 DEFAULT_LOCAL_MODELS_DIR = Path(__file__).resolve().parents[2] / "artifacts" / "models"
 DEFAULT_CACHE_ROOT = Path("/tmp/apcras-model_cache")
@@ -43,6 +38,10 @@ def describe_model_source(path: str | Path) -> str:
         return "gcs-cache"
     except ValueError:
         return "image-local"
+
+
+def emit_model_log(message: str) -> None:
+    print(message, flush=True)
 
 
 def _is_running_in_cloud() -> bool:
@@ -80,12 +79,9 @@ def _sync_gcs_prefix_to_local(*, bucket_name: str, prefix: str, destination: Pat
     cache_key = f"{bucket_name}/{prefix}"
     with _SYNC_LOCK:
         if cache_key in _SYNCED_TARGETS and destination.exists():
-            logger.info(
-                "Model cache ready source=%s gcs_root=gs://%s/%s local_root=%s",
-                "gcs-cache",
-                bucket_name,
-                prefix,
-                destination,
+            emit_model_log(
+                f"Model cache ready source=gcs-cache gcs_root=gs://{bucket_name}/{prefix} "
+                f"local_root={destination}"
             )
             return
 
@@ -122,11 +118,7 @@ def _sync_gcs_prefix_to_local(*, bucket_name: str, prefix: str, destination: Pat
             )
 
         _SYNCED_TARGETS.add(cache_key)
-        logger.info(
-            "Model cache synced source=%s file_count=%s gcs_root=gs://%s/%s local_root=%s",
-            "gcs-cache",
-            downloaded_files,
-            bucket_name,
-            prefix,
-            destination,
+        emit_model_log(
+            f"Model cache synced source=gcs-cache file_count={downloaded_files} "
+            f"gcs_root=gs://{bucket_name}/{prefix} local_root={destination}"
         )
