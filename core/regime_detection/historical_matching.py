@@ -1,6 +1,7 @@
 import os
 import pickle
 import warnings
+import logging
 from typing import Tuple, List, Optional, Dict
 from pathlib import Path
 
@@ -13,7 +14,10 @@ from torch.utils.data import DataLoader, TensorDataset
 
 from core.models.regime_autoencoder import RegimeAutoencoder
 from core.numpy_compat import setup_numpy_compatibility
-from core.storage.model_artifact_store import get_models_root_path
+from core.storage.model_artifact_store import get_models_root_path, describe_model_source
+
+
+logger = logging.getLogger(__name__)
 
 
 FEATURE_COLUMNS = [
@@ -237,6 +241,14 @@ def load_regime_artifacts(
 
     if not (os.path.exists(model_path) and os.path.exists(scaler_path) and os.path.exists(cfg_path)):
         return None
+
+    logger.info(
+        "Regime artifacts load source=%s model_path=%s scaler_path=%s cfg_path=%s",
+        describe_model_source(model_path),
+        model_path,
+        scaler_path,
+        cfg_path,
+    )
 
     try:
         scaler = _load_pickle_with_numpy_compat(scaler_path)
