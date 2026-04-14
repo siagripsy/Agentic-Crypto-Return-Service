@@ -30,11 +30,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     unixodbc \
     unixodbc-dev \
+    odbcinst \
     libgomp1 \
     && curl https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > /usr/share/keyrings/microsoft-prod.gpg \
-    && curl https://packages.microsoft.com/config/debian/12/prod.list > /etc/apt/sources.list.d/mssql-release.list \
+    && echo "deb [arch=amd64 signed-by=/usr/share/keyrings/microsoft-prod.gpg] https://packages.microsoft.com/debian/12/prod bookworm main" > /etc/apt/sources.list.d/mssql-release.list \
     && apt-get update \
-    && apt-get install -y --no-install-recommends msodbcsql18 \
+    && ACCEPT_EULA=Y apt-get install -y --no-install-recommends msodbcsql18 \
+    && odbcinst -q -d \
+    && cat /etc/odbcinst.ini \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt ./
