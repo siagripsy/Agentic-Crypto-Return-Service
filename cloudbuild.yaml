@@ -27,14 +27,6 @@ steps:
           echo "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_IMAGE_NAME}:$COMMIT_SHA" > /workspace/build-artifacts/image-uri.txt
           echo "$COMMIT_SHA" > /workspace/build-artifacts/commit-sha.txt
 
-  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
-    entrypoint: "gsutil"
-    args:
-      - "-m"
-      - "cp"
-      - "-r"
-      - "/workspace/build-artifacts/*"
-      - "gs://${_ARTIFACT_BUCKET}/builds/$COMMIT_SHA/"
 
   - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
     entrypoint: "gcloud"
@@ -69,7 +61,6 @@ substitutions:
   _AR_REPO: "apcras-repo"
   _IMAGE_NAME: "apcras-api"
   _SERVICE_NAME: "apcras-api"
-  _ARTIFACT_BUCKET: "apcras-bak-apcras"
 
 options:
   logging: CLOUD_LOGGING_ONLY
